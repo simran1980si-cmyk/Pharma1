@@ -1,0 +1,5 @@
+{
+  "name": "Renew Pharmacy",
+  "description": "A comprehensive healthcare system for pharmacy management, including token management, inventory, warehouse, and reporting.",
+  "requestFramePermissions": []
+}

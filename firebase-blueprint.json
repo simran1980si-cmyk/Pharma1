@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "Medication": {
+      "title": "Medication",
+      "description": "A medication item in the pharmacy inventory.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The name of the medication." },
+        "category": { "type": "string", "description": "The therapeutic category." },
+        "stock": { "type": "number", "description": "Current quantity in stock." },
+        "reorderThreshold": { "type": "number", "description": "Stock level that triggers a reorder alert." },
+        "expirationDate": { "type": "string", "format": "date", "description": "The date the medication expires." },
+        "price": { "type": "number", "description": "Unit price of the medication." },
+        "unit": { "type": "string", "description": "The unit of measurement (e.g., Tablets, Capsules)." },
+        "lastUpdated": { "type": "string", "format": "date-time", "description": "Timestamp of the last update." }
+      },
+      "required": ["name", "stock", "reorderThreshold", "expirationDate"]
+    },
+    "InventoryLog": {
+      "title": "Inventory Log",
+      "description": "A log entry for stock changes.",
+      "type": "object",
+      "properties": {
+        "medicationId": { "type": "string", "description": "Reference to the medication." },
+        "type": { "type": "string", "enum": ["IN", "OUT", "ADJUST"], "description": "Type of stock movement." },
+        "quantity": { "type": "number", "description": "Amount changed." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the change occurred." },
+        "reason": { "type": "string", "description": "Optional reason for adjustment." }
+      },
+      "required": ["medicationId", "type", "quantity", "timestamp"]
+    },
+    "Token": {
+      "title": "Token",
+      "description": "A patient queue token.",
+      "type": "object",
+      "properties": {
+        "patientName": { "type": "string", "description": "The name of the patient." },
+        "tokenNumber": { "type": "string", "description": "The unique token identifier." },
+        "status": { "type": "string", "enum": ["PENDING", "PROCESSING", "COMPLETED", "CANCELLED"], "description": "Current status of the token." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the token was issued." }
+      },
+      "required": ["patientName", "tokenNumber", "status", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/medications": {
+      "schema": "Medication",
+      "description": "Collection of all medications in the pharmacy."
+    },
+    "/inventory_logs": {
+      "schema": "InventoryLog",
+      "description": "History of all inventory movements."
+    },
+    "/tokens": {
+      "schema": "Token",
+      "description": "Queue of patient tokens."
+    }
+  }
+}

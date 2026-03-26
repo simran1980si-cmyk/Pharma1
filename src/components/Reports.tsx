@@ -13,7 +13,11 @@ import {
   PieChart as PieChartIcon,
   BarChart as BarChartIcon,
   Activity,
-  Loader2
+  Loader2,
+  Truck,
+  CheckCircle,
+  Clock,
+  AlertCircle
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -33,7 +37,7 @@ import {
   Line
 } from 'recharts';
 import { cn } from '../lib/utils';
-import { Medication } from '../types';
+import { Medication, Supplier, PurchaseOrder } from '../types';
 import { supabaseService } from '../services/supabaseService';
 
 const SALES_DATA = [
@@ -64,24 +68,115 @@ const TOP_PRODUCTS = [
 export default function Reports() {
   const [timeRange, setTimeRange] = useState('6M');
   const [medications, setMedications] = useState<Medication[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchMedications = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
-        const data = await supabaseService.getMedications();
-        setMedications(data);
+        const [medsData, suppliersData, ordersData] = await Promise.all([
+          supabaseService.getMedications(),
+          supabaseService.getSuppliers(),
+          supabaseService.getPurchaseOrders()
+        ]);
+        setMedications(medsData);
+        setSuppliers(suppliersData);
+        setPurchaseOrders(ordersData);
       } catch (error) {
-        console.error('Error fetching medications for reports:', error);
+        console.error('Error fetching data for reports:', error);
       } finally {
         setLoading(false);
       }
     };
-    fetchMedications();
+    fetchData();
   }, []);
 
+  const filteredPurchaseOrders = useMemo(() => {
+    const now = new Date();
+    let startDate = new Date();
+    
+    switch (timeRange) {
+      case '1M': startDate.setMonth(now.getMonth() - 1); break;
+      case '3M': startDate.setMonth(now.getMonth() - 3); break;
+      case '6M': startDate.setMonth(now.getMonth() - 6); break;
+      case '1Y': startDate.setFullYear(now.getFullYear() - 1); break;
+      default: return purchaseOrders;
+    }
+    
+    return purchaseOrders.filter(o => new Date(o.orderDate) >= startDate);
+  }, [purchaseOrders, timeRange]);
+
+  const supplierPerformance = useMemo(() => {
+    return suppliers.map(supplier => {
+      const orders = filteredPurchaseOrders.filter(o => o.supplierId === supplier.id);
+      const receivedOrders = orders.filter(o => o.status === 'RECEIVED' && o.receivedDate);
+      
+      // 1. Average Delivery Time (days)
+      let totalDeliveryTime = 0;
+      receivedOrders.forEach(o => {
+        const orderDate = new Date(o.orderDate);
+        const receivedDate = new Date(o.receivedDate!);
+        const diffTime = Math.abs(receivedDate.getTime() - orderDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        totalDeliveryTime += diffDays;
+      });
+      const avgDeliveryTime = receivedOrders.length > 0 
+        ? (totalDeliveryTime / receivedOrders.length).toFixed(1) 
+        : 'N/A';
+
+      // 2. Order Accuracy Rate
+      let totalOrdered = 0;
+      let totalReceived = 0;
+      receivedOrders.forEach(o => {
+        o.items.forEach(item => {
+          totalOrdered += item.quantity;
+          totalReceived += item.receivedQuantity ?? item.quantity; // Fallback to ordered if not specified
+        });
+      });
+      const accuracyRate = totalOrdered > 0 
+        ? ((totalReceived / totalOrdered) * 100).toFixed(1) 
+        : '100.0';
+
+      // 3. Total Spending
+      const totalSpending = orders
+        .filter(o => o.status !== 'CANCELLED')
+        .reduce((sum, o) => sum + o.totalAmount, 0);
+
+      return {
+        id: supplier.id,
+        name: supplier.name,
+        avgDeliveryTime: avgDeliveryTime === 'N/A' ? 0 : parseFloat(avgDeliveryTime),
+        accuracyRate: parseFloat(accuracyRate),
+        totalSpending,
+        orderCount: orders.length,
+        receivedCount: receivedOrders.length
+      };
+    });
+  }, [suppliers, filteredPurchaseOrders]);
+
+  const supplierSummary = useMemo(() => {
+    const activeSuppliers = supplierPerformance.filter(s => s.avgDeliveryTime > 0);
+    const avgDeliveryTime = activeSuppliers.length > 0 
+      ? (activeSuppliers.reduce((sum, s) => sum + s.avgDeliveryTime, 0) / activeSuppliers.length).toFixed(1)
+      : '0.0';
+    
+    const avgAccuracyRate = supplierPerformance.length > 0
+      ? (supplierPerformance.reduce((sum, s) => sum + s.accuracyRate, 0) / supplierPerformance.length).toFixed(1)
+      : '0.0';
+
+    const totalSpending = supplierPerformance.reduce((sum, s) => sum + s.totalSpending, 0);
+
+    return {
+      avgDeliveryTime,
+      avgAccuracyRate,
+      totalSpending
+    };
+  }, [supplierPerformance]);
+
   const priceAlertMedications = useMemo(() => {
+    // ... (same logic as before)
     return medications.filter(m => {
       if (!m.previousPrice || !m.priceHistory) return false;
       const threshold = m.priceAlertThreshold || 0.1;
@@ -337,11 +432,163 @@ export default function Reports() {
           </div>
         </div>
       </div>
+
+      {/* Supplier Performance Section */}
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-blue-50 rounded-lg">
+            <Truck className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">Supplier Performance Analysis</h3>
+            <p className="text-sm text-gray-500">Evaluating delivery times, accuracy, and spending across suppliers.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Spending Chart */}
+          <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <h4 className="text-sm font-bold text-gray-900 mb-6">Total Spending per Supplier</h4>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={supplierPerformance} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
+                  <XAxis type="number" hide />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{fill: '#64748b', fontSize: 12}} 
+                    width={120}
+                  />
+                  <Tooltip 
+                    cursor={{fill: '#f8fafc'}}
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                    formatter={(value: number) => [`$${value.toLocaleString()}`, 'Total Spending']}
+                  />
+                  <Bar dataKey="totalSpending" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={24} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Quick Metrics */}
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+              <div className="flex items-center gap-3 mb-4">
+                <Clock className="w-5 h-5 text-amber-500" />
+                <h4 className="text-sm font-bold text-gray-900">Avg. Delivery Time</h4>
+              </div>
+              <div className="text-3xl font-bold text-gray-900">
+                {(supplierPerformance.reduce((sum, s) => sum + s.avgDeliveryTime, 0) / (supplierPerformance.filter(s => s.avgDeliveryTime > 0).length || 1)).toFixed(1)} days
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Across all active suppliers</p>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+              <div className="flex items-center gap-3 mb-4">
+                <CheckCircle className="w-5 h-5 text-emerald-500" />
+                <h4 className="text-sm font-bold text-gray-900">Order Accuracy Rate</h4>
+              </div>
+              <div className="text-3xl font-bold text-gray-900">
+                {(supplierPerformance.reduce((sum, s) => sum + s.accuracyRate, 0) / (supplierPerformance.length || 1)).toFixed(1)}%
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Based on received vs. ordered quantities</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Detailed Supplier Table */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-6 border-bottom border-gray-100">
+            <h4 className="text-sm font-bold text-gray-900">Supplier Performance Metrics</h4>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Supplier</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Orders</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Avg. Delivery</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-center">Accuracy</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Total Spending</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {supplierPerformance.map((s) => (
+                  <tr key={s.id} className="hover:bg-gray-50 transition-all">
+                    <td className="px-6 py-4">
+                      <span className="font-bold text-gray-900 text-sm">{s.name}</span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className="text-sm text-gray-600 font-medium">{s.orderCount} orders</span>
+                      <div className="text-[10px] text-gray-400">{s.receivedCount} received</div>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-amber-500" />
+                        <span className="text-sm font-bold text-gray-900">{s.avgDeliveryTime === 0 ? 'N/A' : `${s.avgDeliveryTime}d`}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <div className={cn(
+                          "w-2 h-2 rounded-full",
+                          s.accuracyRate >= 98 ? "bg-emerald-500" : s.accuracyRate >= 90 ? "bg-amber-500" : "bg-red-500"
+                        )}></div>
+                        <span className="text-sm font-bold text-gray-900">{s.accuracyRate}%</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <span className="text-sm font-bold text-gray-900">${s.totalSpending.toLocaleString()}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Supplier Performance Summary Cards */}
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-blue-50 rounded-lg">
+            <Activity className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">Supplier Performance Summary</h3>
+            <p className="text-sm text-gray-500">Overall metrics across your entire supplier network.</p>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <ReportStat 
+            label="Avg. Delivery Time" 
+            value={`${supplierSummary.avgDeliveryTime} days`} 
+            icon={Clock} 
+            color="amber" 
+          />
+          <ReportStat 
+            label="Avg. Order Accuracy" 
+            value={`${supplierSummary.avgAccuracyRate}%`} 
+            icon={CheckCircle} 
+            color="emerald" 
+          />
+          <ReportStat 
+            label="Total Supplier Spending" 
+            value={`$${supplierSummary.totalSpending.toLocaleString()}`} 
+            icon={DollarSign} 
+            color="blue" 
+          />
+        </div>
+      </div>
     </div>
   );
 }
 
-function ReportStat({ label, value, change, trend, icon: Icon, color }: { label: string, value: string, change: string, trend: 'up' | 'down', icon: any, color: string }) {
+function ReportStat({ label, value, change, trend, icon: Icon, color }: { label: string, value: string, change?: string, trend?: 'up' | 'down', icon: any, color: string }) {
   const colors: Record<string, string> = {
     blue: 'text-blue-600 bg-blue-50',
     emerald: 'text-emerald-600 bg-emerald-50',
@@ -355,13 +602,15 @@ function ReportStat({ label, value, change, trend, icon: Icon, color }: { label:
         <div className={cn("p-3 rounded-xl", colors[color])}>
           <Icon className="w-6 h-6" />
         </div>
-        <div className={cn(
-          "flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full",
-          trend === 'up' ? "text-emerald-600 bg-emerald-50" : "text-red-600 bg-red-50"
-        )}>
-          {trend === 'up' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-          {change}
-        </div>
+        {change && trend && (
+          <div className={cn(
+            "flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full",
+            trend === 'up' ? "text-emerald-600 bg-emerald-50" : "text-red-600 bg-red-50"
+          )}>
+            {trend === 'up' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+            {change}
+          </div>
+        )}
       </div>
       <div className="mt-4">
         <h3 className="text-2xl font-bold text-gray-900">{value}</h3>

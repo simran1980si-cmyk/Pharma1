@@ -229,7 +229,12 @@ export default function Warehouse() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="font-medium text-gray-900">{supplier?.name}</div>
+                          <div className="flex items-center gap-2">
+                            <div className="font-medium text-gray-900">{supplier?.name}</div>
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                              {order.items.reduce((sum, item) => sum + item.quantity, 0).toLocaleString()} units
+                            </span>
+                          </div>
                           <div className="text-xs text-gray-500">{supplier?.category}</div>
                         </td>
                         <td className="px-6 py-4">

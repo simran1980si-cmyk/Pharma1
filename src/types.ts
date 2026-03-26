@@ -76,6 +76,7 @@ export type PurchaseOrder = {
     name: string;
     batchNumber?: string;
     quantity: number;
+    receivedQuantity?: number;
     unitPrice: number;
   }[];
   totalAmount: number;

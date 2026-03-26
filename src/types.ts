@@ -26,3 +26,51 @@ export type Token = {
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'CANCELLED';
   timestamp: string;
 };
+
+export type SaleItem = {
+  medicationId: string;
+  name: string;
+  quantity: number;
+  price: number;
+  total: number;
+};
+
+export type Sale = {
+  id: string;
+  tokenNumber?: string;
+  patientName: string;
+  items: SaleItem[];
+  totalAmount: number;
+  paymentMethod: 'CASH' | 'CARD' | 'INSURANCE';
+  timestamp: string;
+  status: 'COMPLETED' | 'REFUNDED';
+};
+
+export type Supplier = {
+  id: string;
+  name: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  category: string;
+  address: string;
+  notes?: string;
+};
+
+
+export type PurchaseOrder = {
+  id: string;
+  supplierId: string;
+  items: {
+    medicationId: string;
+    name: string;
+    quantity: number;
+    unitPrice: number;
+  }[];
+  totalAmount: number;
+  status: 'PENDING' | 'ORDERED' | 'RECEIVED' | 'CANCELLED';
+  orderDate: string;
+  receivedDate?: string;
+};
+
+

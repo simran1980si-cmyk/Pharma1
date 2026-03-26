@@ -40,6 +40,72 @@
         "timestamp": { "type": "string", "format": "date-time", "description": "When the token was issued." }
       },
       "required": ["patientName", "tokenNumber", "status", "timestamp"]
+    },
+    "Sale": {
+      "title": "Sale",
+      "description": "A completed medication sale.",
+      "type": "object",
+      "properties": {
+        "tokenNumber": { "type": "string", "description": "Optional reference to a patient token." },
+        "patientName": { "type": "string", "description": "Name of the patient." },
+        "totalAmount": { "type": "number", "description": "Total value of the sale." },
+        "paymentMethod": { "type": "string", "enum": ["CASH", "CARD", "INSURANCE"], "description": "How the sale was paid." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the sale occurred." },
+        "items": { 
+          "type": "array", 
+          "items": {
+            "type": "object",
+            "properties": {
+              "medicationId": { "type": "string" },
+              "name": { "type": "string" },
+              "quantity": { "type": "number" },
+              "price": { "type": "number" },
+              "total": { "type": "number" }
+            }
+          }
+        }
+      },
+      "required": ["patientName", "totalAmount", "paymentMethod", "timestamp", "items"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "A medication supplier.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "contactPerson": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "category": { "type": "string" },
+        "address": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["name", "contactPerson", "email", "phone", "address"]
+    },
+    "PurchaseOrder": {
+      "title": "Purchase Order",
+      "description": "A bulk order from a supplier.",
+      "type": "object",
+      "properties": {
+        "supplierId": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["PENDING", "ORDERED", "RECEIVED", "CANCELLED"] },
+        "orderDate": { "type": "string", "format": "date" },
+        "receivedDate": { "type": "string", "format": "date" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "medicationId": { "type": "string" },
+              "name": { "type": "string" },
+              "quantity": { "type": "number" },
+              "unitPrice": { "type": "number" }
+            }
+          }
+        }
+      },
+      "required": ["supplierId", "totalAmount", "status", "orderDate", "items"]
     }
   },
   "firestore": {
@@ -54,6 +120,18 @@
     "/tokens": {
       "schema": "Token",
       "description": "Queue of patient tokens."
+    },
+    "/sales": {
+      "schema": "Sale",
+      "description": "Record of all completed transactions."
+    },
+    "/suppliers": {
+      "schema": "Supplier",
+      "description": "Directory of medication suppliers."
+    },
+    "/purchase_orders": {
+      "schema": "PurchaseOrder",
+      "description": "Records of bulk procurement orders."
     }
   }
 }

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   Plus, 
   Search, 
@@ -14,19 +14,28 @@ import {
 import { format } from 'date-fns';
 import { cn } from '../lib/utils';
 import { Token } from '../types';
-
-const MOCK_TOKENS: Token[] = [
-  { id: '1', patientName: 'John Doe', tokenNumber: 'T-001', status: 'PENDING', timestamp: new Date().toISOString() },
-  { id: '2', patientName: 'Jane Smith', tokenNumber: 'T-002', status: 'PROCESSING', timestamp: new Date().toISOString() },
-  { id: '3', patientName: 'Robert Johnson', tokenNumber: 'T-003', status: 'COMPLETED', timestamp: new Date().toISOString() },
-  { id: '4', patientName: 'Emily Davis', tokenNumber: 'T-004', status: 'PENDING', timestamp: new Date().toISOString() },
-  { id: '5', patientName: 'Michael Wilson', tokenNumber: 'T-005', status: 'CANCELLED', timestamp: new Date().toISOString() },
-];
+import { supabaseService } from '../services/supabaseService';
 
 export default function TokenManagement() {
-  const [tokens, setTokens] = useState<Token[]>(MOCK_TOKENS);
+  const [tokens, setTokens] = useState<Token[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+
+  useEffect(() => {
+    const fetchTokens = async () => {
+      try {
+        setLoading(true);
+        const data = await supabaseService.getTokens();
+        setTokens(data);
+      } catch (error) {
+        console.error('Error fetching tokens:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTokens();
+  }, []);
 
   const filteredTokens = useMemo(() => {
     return tokens.filter(token => 
@@ -42,8 +51,13 @@ export default function TokenManagement() {
     return { pending, processing, completed };
   }, [tokens]);
 
-  const updateStatus = (id: string, status: Token['status']) => {
-    setTokens(prev => prev.map(t => t.id === id ? { ...t, status } : t));
+  const updateStatus = async (id: string, status: Token['status']) => {
+    try {
+      await supabaseService.updateTokenStatus(id, status);
+      setTokens(prev => prev.map(t => t.id === id ? { ...t, status } : t));
+    } catch (error) {
+      console.error('Error updating token status:', error);
+    }
   };
 
   const getStatusConfig = (status: Token['status']) => {
@@ -98,76 +112,83 @@ export default function TokenManagement() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
-          {filteredTokens.map((token) => {
-            const config = getStatusConfig(token.status);
-            return (
-              <div key={token.id} className="bg-white border border-gray-100 rounded-2xl p-5 hover:shadow-md transition-all group relative">
-                <div className="flex justify-between items-start mb-4">
-                  <div className={cn("px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5", config.color)}>
-                    <config.icon className={cn("w-3 h-3", token.status === 'PROCESSING' && "animate-spin")} />
-                    {config.label}
-                  </div>
-                  <button className="p-1 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
-                    <MoreVertical className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400">
-                      <User className="w-5 h-5" />
+          {loading ? (
+            <div className="col-span-full flex flex-col items-center justify-center py-20 gap-4">
+              <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+              <p className="text-gray-500 font-medium">Loading tokens...</p>
+            </div>
+          ) : (
+            filteredTokens.map((token) => {
+              const config = getStatusConfig(token.status);
+              return (
+                <div key={token.id} className="bg-white border border-gray-100 rounded-2xl p-5 hover:shadow-md transition-all group relative">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className={cn("px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5", config.color)}>
+                      <config.icon className={cn("w-3 h-3", token.status === 'PROCESSING' && "animate-spin")} />
+                      {config.label}
                     </div>
-                    <div>
-                      <h4 className="font-bold text-gray-900 leading-tight">{token.patientName}</h4>
-                      <p className="text-xs text-gray-500">Patient Name</p>
-                    </div>
+                    <button className="p-1 text-gray-400 hover:text-gray-600 rounded-lg transition-colors">
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400">
-                      <Hash className="w-5 h-5" />
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400">
+                        <User className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-gray-900 leading-tight">{token.patientName}</h4>
+                        <p className="text-xs text-gray-500">Patient Name</p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="font-bold text-blue-600 leading-tight">{token.tokenNumber}</h4>
-                      <p className="text-xs text-gray-500">Token Number</p>
+
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400">
+                        <Hash className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-blue-600 leading-tight">{token.tokenNumber}</h4>
+                        <p className="text-xs text-gray-500">Token Number</p>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="mt-6 pt-4 border-t border-gray-50 flex gap-2">
-                  {token.status === 'PENDING' && (
-                    <button 
-                      onClick={() => updateStatus(token.id, 'PROCESSING')}
-                      className="flex-1 py-2 bg-blue-50 text-blue-600 text-xs font-bold rounded-lg hover:bg-blue-100 transition-colors"
-                    >
-                      Process
-                    </button>
-                  )}
-                  {token.status === 'PROCESSING' && (
-                    <button 
-                      onClick={() => updateStatus(token.id, 'COMPLETED')}
-                      className="flex-1 py-2 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-lg hover:bg-emerald-100 transition-colors"
-                    >
-                      Complete
-                    </button>
-                  )}
-                  {(token.status === 'PENDING' || token.status === 'PROCESSING') && (
-                    <button 
-                      onClick={() => updateStatus(token.id, 'CANCELLED')}
-                      className="flex-1 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-lg hover:bg-red-100 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                  {token.status === 'COMPLETED' && (
-                    <div className="flex-1 py-2 text-center text-emerald-600 text-xs font-bold">
-                      Order Completed
-                    </div>
-                  )}
+                  <div className="mt-6 pt-4 border-t border-gray-50 flex gap-2">
+                    {token.status === 'PENDING' && (
+                      <button 
+                        onClick={() => updateStatus(token.id, 'PROCESSING')}
+                        className="flex-1 py-2 bg-blue-50 text-blue-600 text-xs font-bold rounded-lg hover:bg-blue-100 transition-colors"
+                      >
+                        Process
+                      </button>
+                    )}
+                    {token.status === 'PROCESSING' && (
+                      <button 
+                        onClick={() => updateStatus(token.id, 'COMPLETED')}
+                        className="flex-1 py-2 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-lg hover:bg-emerald-100 transition-colors"
+                      >
+                        Complete
+                      </button>
+                    )}
+                    {(token.status === 'PENDING' || token.status === 'PROCESSING') && (
+                      <button 
+                        onClick={() => updateStatus(token.id, 'CANCELLED')}
+                        className="flex-1 py-2 bg-red-50 text-red-600 text-xs font-bold rounded-lg hover:bg-red-100 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    {token.status === 'COMPLETED' && (
+                      <div className="flex-1 py-2 text-center text-emerald-600 text-xs font-bold">
+                        Order Completed
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -178,18 +199,23 @@ export default function TokenManagement() {
             <div className="p-6 border-b border-gray-100">
               <h3 className="text-xl font-bold text-gray-900">Issue New Token</h3>
             </div>
-            <form className="p-6 space-y-4" onSubmit={(e) => {
+            <form className="p-6 space-y-4" onSubmit={async (e) => {
               e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              const newToken: Token = {
-                id: Math.random().toString(36).substr(2, 9),
-                patientName: formData.get('patientName') as string,
-                tokenNumber: `T-${(tokens.length + 1).toString().padStart(3, '0')}`,
-                status: 'PENDING',
-                timestamp: new Date().toISOString(),
-              };
-              setTokens(prev => [newToken, ...prev]);
-              setShowAddModal(false);
+              try {
+                const formData = new FormData(e.currentTarget);
+                const tokenData = {
+                  patientName: formData.get('patientName') as string,
+                  tokenNumber: `T-${(tokens.length + 1).toString().padStart(3, '0')}`,
+                  status: 'PENDING' as const,
+                  timestamp: new Date().toISOString(),
+                };
+                await supabaseService.addToken(tokenData);
+                const updatedTokens = await supabaseService.getTokens();
+                setTokens(updatedTokens);
+                setShowAddModal(false);
+              } catch (error) {
+                console.error('Error issuing token:', error);
+              }
             }}>
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-gray-500 uppercase">Patient Name</label>

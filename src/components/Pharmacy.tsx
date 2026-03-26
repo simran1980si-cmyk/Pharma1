@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
   ShoppingCart, 
@@ -10,69 +10,48 @@ import {
   ShieldCheck,
   User,
   Ticket,
-  CheckCircle2
+  CheckCircle2,
+  Loader2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { Medication, SaleItem, Token } from '../types';
-
-// Mock data (reuse from Inventory if possible, but for now local)
-const MOCK_MEDICATIONS: Medication[] = [
-  { 
-    id: '1', 
-    name: 'Amoxicillin 500mg', 
-    category: 'Antibiotics', 
-    stock: 15, 
-    reorderThreshold: 20, 
-    expirationDate: '2026-05-15', 
-    price: 12.50, 
-    unit: 'Capsules', 
-    lastUpdated: '2026-03-25',
-    batches: [{ batchNumber: 'BAT-001', quantity: 15, expirationDate: '2026-05-15' }]
-  },
-  { 
-    id: '2', 
-    name: 'Lisinopril 10mg', 
-    category: 'Hypertension', 
-    stock: 120, 
-    reorderThreshold: 50, 
-    expirationDate: '2027-01-10', 
-    price: 8.00, 
-    unit: 'Tablets', 
-    lastUpdated: '2026-03-24',
-    batches: [{ batchNumber: 'BAT-003', quantity: 120, expirationDate: '2027-01-10' }]
-  },
-  { 
-    id: '3', 
-    name: 'Atorvastatin 20mg', 
-    category: 'Cholesterol', 
-    stock: 8, 
-    reorderThreshold: 30, 
-    expirationDate: '2026-04-01', 
-    price: 15.20, 
-    unit: 'Tablets', 
-    lastUpdated: '2026-03-26',
-    batches: [{ batchNumber: 'BAT-004', quantity: 8, expirationDate: '2026-04-01' }]
-  },
-];
-
-const MOCK_TOKENS: Token[] = [
-  { id: '1', patientName: 'John Doe', tokenNumber: 'T-001', status: 'PENDING', timestamp: new Date().toISOString() },
-  { id: '2', patientName: 'Jane Smith', tokenNumber: 'T-002', status: 'PROCESSING', timestamp: new Date().toISOString() },
-];
+import { Medication, SaleItem, Token, Sale } from '../types';
+import { supabaseService } from '../services/supabaseService';
 
 export default function Pharmacy() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [tokens, setTokens] = useState<Token[]>([]);
+  const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState<SaleItem[]>([]);
   const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'INSURANCE'>('CASH');
   const [showSuccess, setShowSuccess] = useState(false);
 
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [medsData, tokensData] = await Promise.all([
+          supabaseService.getMedications(),
+          supabaseService.getTokens()
+        ]);
+        setMedications(medsData);
+        setTokens(tokensData);
+      } catch (error) {
+        console.error('Error fetching pharmacy data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
   const filteredMedications = useMemo(() => {
-    return MOCK_MEDICATIONS.filter(med => 
+    return medications.filter(med => 
       med.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       med.category.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [searchQuery]);
+  }, [searchQuery, medications]);
 
   const addToCart = (med: Medication) => {
     setCart(prev => {
@@ -112,15 +91,35 @@ export default function Pharmacy() {
   const tax = subtotal * 0.05; // 5% tax
   const total = subtotal + tax;
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (cart.length === 0) return;
-    // In real app: save sale to Firestore, update inventory
-    setShowSuccess(true);
-    setTimeout(() => {
-      setShowSuccess(false);
-      setCart([]);
-      setSelectedToken(null);
-    }, 3000);
+    
+    try {
+      const saleData: Omit<Sale, 'id'> = {
+        items: cart,
+        totalAmount: total,
+        paymentMethod: paymentMethod,
+        tokenNumber: selectedToken?.tokenNumber,
+        patientName: selectedToken?.patientName || 'Walk-in',
+        timestamp: new Date().toISOString(),
+        status: 'COMPLETED'
+      };
+
+      await supabaseService.addSale(saleData);
+      
+      // Update local inventory (optional, could also refetch)
+      const medsData = await supabaseService.getMedications();
+      setMedications(medsData);
+
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        setCart([]);
+        setSelectedToken(null);
+      }, 3000);
+    } catch (error) {
+      console.error('Error during checkout:', error);
+    }
   };
 
   return (
@@ -146,39 +145,46 @@ export default function Pharmacy() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 pt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 content-start">
-          {filteredMedications.map((med) => (
-            <button
-              key={med.id}
-              onClick={() => addToCart(med)}
-              disabled={med.stock === 0}
-              className={cn(
-                "bg-white p-5 rounded-2xl border border-gray-100 text-left hover:shadow-md transition-all group relative",
-                med.stock === 0 && "opacity-60 grayscale cursor-not-allowed"
-              )}
-            >
-              <div className="flex justify-between items-start mb-3">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
-                  {med.category}
-                </span>
-                <span className={cn(
-                  "text-xs font-bold",
-                  med.stock <= med.reorderThreshold ? "text-amber-600" : "text-emerald-600"
-                )}>
-                  {med.stock} in stock
-                </span>
-              </div>
-              <h4 className="font-bold text-gray-900 text-lg leading-tight group-hover:text-blue-600 transition-colors">
-                {med.name}
-              </h4>
-              <p className="text-sm text-gray-500 mt-1">{med.unit}</p>
-              <div className="mt-4 flex justify-between items-center">
-                <span className="text-xl font-black text-gray-900">${med.price.toFixed(2)}</span>
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all transform scale-90 group-hover:scale-100">
-                  <Plus className="w-5 h-5" />
+          {loading ? (
+            <div className="col-span-full flex flex-col items-center justify-center py-20 gap-4">
+              <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+              <p className="text-gray-500 font-medium">Loading medications...</p>
+            </div>
+          ) : (
+            filteredMedications.map((med) => (
+              <button
+                key={med.id}
+                onClick={() => addToCart(med)}
+                disabled={med.stock === 0}
+                className={cn(
+                  "bg-white p-5 rounded-2xl border border-gray-100 text-left hover:shadow-md transition-all group relative",
+                  med.stock === 0 && "opacity-60 grayscale cursor-not-allowed"
+                )}
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+                    {med.category}
+                  </span>
+                  <span className={cn(
+                    "text-xs font-bold",
+                    med.stock <= med.reorderThreshold ? "text-amber-600" : "text-emerald-600"
+                  )}>
+                    {med.stock} in stock
+                  </span>
                 </div>
-              </div>
-            </button>
-          ))}
+                <h4 className="font-bold text-gray-900 text-lg leading-tight group-hover:text-blue-600 transition-colors">
+                  {med.name}
+                </h4>
+                <p className="text-sm text-gray-500 mt-1">{med.unit}</p>
+                <div className="mt-4 flex justify-between items-center">
+                  <span className="text-xl font-black text-gray-900">${med.price.toFixed(2)}</span>
+                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all transform scale-90 group-hover:scale-100">
+                    <Plus className="w-5 h-5" />
+                  </div>
+                </div>
+              </button>
+            ))
+          )}
         </div>
       </div>
 
@@ -244,13 +250,13 @@ export default function Pharmacy() {
             <select 
               className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20"
               onChange={(e) => {
-                const token = MOCK_TOKENS.find(t => t.id === e.target.value);
+                const token = tokens.find(t => t.id === e.target.value);
                 setSelectedToken(token || null);
               }}
               value={selectedToken?.id || ''}
             >
               <option value="">No Token (Walk-in)</option>
-              {MOCK_TOKENS.map(t => (
+              {tokens.map(t => (
                 <option key={t.id} value={t.id}>{t.tokenNumber} - {t.patientName}</option>
               ))}
             </select>

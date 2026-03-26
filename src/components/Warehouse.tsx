@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Truck, 
   Plus, 
@@ -15,24 +15,13 @@ import {
   Trash2,
   Minus,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Loader2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '../lib/utils';
 import { Supplier, PurchaseOrder, Medication } from '../types';
-import { MOCK_MEDICATIONS } from '../data';
-
-const MOCK_SUPPLIERS: Supplier[] = [
-  { id: '1', name: 'Global Pharma Corp', contactPerson: 'Alice Smith', email: 'alice@globalpharma.com', phone: '+1 234 567 890', category: 'General', address: '123 Pharma Way, New York, NY 10001', notes: 'Primary supplier for generic medications. Reliable delivery.' },
-  { id: '2', name: 'MediSupply Inc', contactPerson: 'Bob Wilson', email: 'bob@medisupply.com', phone: '+1 987 654 321', category: 'Specialized', address: '456 Medical Blvd, Chicago, IL 60601', notes: 'Specializes in high-end medical equipment and rare drugs.' },
-  { id: '3', name: 'LifeCare Logistics', contactPerson: 'Charlie Brown', email: 'charlie@lifecare.com', phone: '+1 555 123 456', category: 'Antibiotics', address: '789 Health St, San Francisco, CA 94101', notes: 'Fastest delivery for urgent antibiotic orders.' },
-];
-
-const MOCK_ORDERS: PurchaseOrder[] = [
-  { id: 'PO-001', supplierId: '1', items: [{ medicationId: '1', name: 'Amoxicillin', batchNumber: 'BAT-2026-001', quantity: 500, unitPrice: 10 }], totalAmount: 5000, status: 'RECEIVED', orderDate: '2026-03-10', receivedDate: '2026-03-15' },
-  { id: 'PO-002', supplierId: '2', items: [{ medicationId: '2', name: 'Lisinopril', batchNumber: 'BAT-2026-002', quantity: 1000, unitPrice: 5 }], totalAmount: 5000, status: 'ORDERED', orderDate: '2026-03-20' },
-  { id: 'PO-003', supplierId: '3', items: [{ medicationId: '3', name: 'Atorvastatin', batchNumber: 'BAT-2026-003', quantity: 200, unitPrice: 12 }], totalAmount: 2400, status: 'PENDING', orderDate: '2026-03-25' },
-];
+import { supabaseService } from '../services/supabaseService';
 
 export default function Warehouse() {
   const [activeTab, setActiveTab] = useState<'orders' | 'suppliers'>('orders');
@@ -40,10 +29,33 @@ export default function Warehouse() {
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
-  const [orders, setOrders] = useState<PurchaseOrder[]>(MOCK_ORDERS);
-  const [suppliers, setSuppliers] = useState<Supplier[]>(MOCK_SUPPLIERS);
+  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [loading, setLoading] = useState(true);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [ordersData, suppliersData, medsData] = await Promise.all([
+          supabaseService.getPurchaseOrders(),
+          supabaseService.getSuppliers(),
+          supabaseService.getMedications()
+        ]);
+        setOrders(ordersData);
+        setSuppliers(suppliersData);
+        setMedications(medsData);
+      } catch (error) {
+        console.error('Error fetching warehouse data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
   const [newOrder, setNewOrder] = useState({
     supplierId: '',
     orderDate: format(new Date(), 'yyyy-MM-dd'),
@@ -60,12 +72,19 @@ export default function Warehouse() {
     notes: ''
   });
 
-  const handleStatusChange = (orderId: string, newStatus: PurchaseOrder['status']) => {
-    setOrders(prev => prev.map(order => 
-      order.id === orderId 
-        ? { ...order, status: newStatus, receivedDate: newStatus === 'RECEIVED' ? format(new Date(), 'yyyy-MM-dd') : order.receivedDate } 
-        : order
-    ));
+  const handleStatusChange = async (orderId: string, newStatus: PurchaseOrder['status']) => {
+    try {
+      const receivedDate = newStatus === 'RECEIVED' ? format(new Date(), 'yyyy-MM-dd') : undefined;
+      await supabaseService.updatePurchaseOrderStatus(orderId, newStatus, receivedDate);
+      
+      setOrders(prev => prev.map(order => 
+        order.id === orderId 
+          ? { ...order, status: newStatus, receivedDate: receivedDate || order.receivedDate } 
+          : order
+      ));
+    } catch (error) {
+      console.error('Error updating order status:', error);
+    }
   };
 
   const handleEditSupplier = (supplier: Supplier) => {
@@ -171,7 +190,12 @@ export default function Warehouse() {
           </div>
         </div>
 
-        {activeTab === 'orders' ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+            <p className="text-gray-500 font-medium">Loading warehouse data...</p>
+          </div>
+        ) : activeTab === 'orders' ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
@@ -364,24 +388,29 @@ export default function Warehouse() {
               <h3 className="text-xl font-bold text-gray-900">Create New Purchase Order</h3>
             </div>
             
-            <form className="flex-1 overflow-y-auto p-6 space-y-6" onSubmit={(e) => {
+            <form className="flex-1 overflow-y-auto p-6 space-y-6" onSubmit={async (e) => {
               e.preventDefault();
-              const total = newOrder.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-              const order: PurchaseOrder = {
-                id: `PO-${(orders.length + 1).toString().padStart(3, '0')}`,
-                supplierId: newOrder.supplierId,
-                items: newOrder.items,
-                totalAmount: total,
-                status: 'PENDING',
-                orderDate: newOrder.orderDate
-              };
-              setOrders(prev => [order, ...prev]);
-              setShowOrderModal(false);
-              setNewOrder({
-                supplierId: '',
-                orderDate: format(new Date(), 'yyyy-MM-dd'),
-                items: [{ medicationId: '', name: '', batchNumber: '', quantity: 1, unitPrice: 0 }]
-              });
+              try {
+                const total = newOrder.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+                const orderData: Omit<PurchaseOrder, 'id'> = {
+                  supplierId: newOrder.supplierId,
+                  items: newOrder.items,
+                  totalAmount: total,
+                  status: 'PENDING',
+                  orderDate: newOrder.orderDate
+                };
+                await supabaseService.addPurchaseOrder(orderData);
+                const updatedOrders = await supabaseService.getPurchaseOrders();
+                setOrders(updatedOrders);
+                setShowOrderModal(false);
+                setNewOrder({
+                  supplierId: '',
+                  orderDate: format(new Date(), 'yyyy-MM-dd'),
+                  items: [{ medicationId: '', name: '', batchNumber: '', quantity: 1, unitPrice: 0 }]
+                });
+              } catch (error) {
+                console.error('Error creating purchase order:', error);
+              }
             }}>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
@@ -444,7 +473,7 @@ export default function Warehouse() {
                             className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
                             value={item.medicationId}
                             onChange={(e) => {
-                              const selectedMed = MOCK_MEDICATIONS.find(m => m.id === e.target.value);
+                              const selectedMed = medications.find(m => m.id === e.target.value);
                               const newItems = [...newOrder.items];
                               newItems[idx].medicationId = e.target.value;
                               newItems[idx].name = selectedMed?.name || '';
@@ -454,7 +483,7 @@ export default function Warehouse() {
                             required
                           >
                             <option value="">Select Medication</option>
-                            {[...MOCK_MEDICATIONS].sort((a, b) => a.name.localeCompare(b.name)).map(m => (
+                            {[...medications].sort((a, b) => a.name.localeCompare(b.name)).map(m => (
                               <option key={m.id} value={m.id}>{m.name}</option>
                             ))}
                           </select>
@@ -566,22 +595,20 @@ export default function Warehouse() {
               </h3>
             </div>
             
-            <form className="flex-1 overflow-y-auto p-6 space-y-6" onSubmit={(e) => {
+            <form className="flex-1 overflow-y-auto p-6 space-y-6" onSubmit={async (e) => {
               e.preventDefault();
-              if (editingSupplier) {
-                const updatedSupplier: Supplier = {
-                  ...editingSupplier,
-                  ...newSupplier
-                };
-                setSuppliers(prev => prev.map(s => s.id === editingSupplier.id ? updatedSupplier : s));
-              } else {
-                const supplier: Supplier = {
-                  id: (suppliers.length + 1).toString(),
-                  ...newSupplier
-                };
-                setSuppliers(prev => [supplier, ...prev]);
+              try {
+                if (editingSupplier) {
+                  await supabaseService.updateSupplier(editingSupplier.id, newSupplier);
+                } else {
+                  await supabaseService.addSupplier(newSupplier);
+                }
+                const updatedSuppliers = await supabaseService.getSuppliers();
+                setSuppliers(updatedSuppliers);
+                resetSupplierForm();
+              } catch (error) {
+                console.error('Error saving supplier:', error);
               }
-              resetSupplierForm();
             }}>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">

@@ -1,10 +1,12 @@
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Users, 
   ShoppingBag, 
   TrendingUp, 
   Clock,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Loader2
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -18,18 +20,89 @@ import {
   Area
 } from 'recharts';
 import { cn } from '../lib/utils';
-
-const DATA = [
-  { name: 'Mon', sales: 4000, tokens: 240 },
-  { name: 'Tue', sales: 3000, tokens: 198 },
-  { name: 'Wed', sales: 2000, tokens: 980 },
-  { name: 'Thu', sales: 2780, tokens: 390 },
-  { name: 'Fri', sales: 1890, tokens: 480 },
-  { name: 'Sat', sales: 2390, tokens: 380 },
-  { name: 'Sun', sales: 3490, tokens: 430 },
-];
+import { supabaseService } from '../services/supabaseService';
 
 export default function Dashboard() {
+  const [stats, setStats] = useState({
+    totalSales: 0,
+    activeTokens: 0,
+    totalPatients: 0,
+    totalOrders: 0
+  });
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        const [sales, tokens, meds, orders] = await Promise.all([
+          supabaseService.getSales(),
+          supabaseService.getTokens(),
+          supabaseService.getMedications(),
+          supabaseService.getPurchaseOrders()
+        ]);
+
+        const totalSales = sales.reduce((sum, s) => sum + s.totalAmount, 0);
+        const activeTokens = tokens.filter(t => t.status === 'PENDING' || t.status === 'PROCESSING').length;
+        const totalOrders = orders.length;
+        
+        // Mocking total patients for now as we don't have a patients table yet
+        const totalPatients = 1240; 
+
+        setStats({
+          totalSales,
+          activeTokens,
+          totalPatients,
+          totalOrders
+        });
+
+        // Process chart data (last 7 days)
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const last7Days = Array.from({ length: 7 }, (_, i) => {
+          const date = new Date();
+          date.setDate(date.getDate() - (6 - i));
+          return {
+            name: days[date.getDay()],
+            date: date.toISOString().split('T')[0],
+            sales: 0,
+            tokens: 0
+          };
+        });
+
+        sales.forEach(sale => {
+          const saleDate = sale.timestamp.split('T')[0];
+          const day = last7Days.find(d => d.date === saleDate);
+          if (day) day.sales += sale.totalAmount;
+        });
+
+        tokens.forEach(token => {
+          const tokenDate = token.timestamp.split('T')[0];
+          const day = last7Days.find(d => d.date === tokenDate);
+          if (day) day.tokens += 1;
+        });
+
+        setChartData(last7Days);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDashboardData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+          <p className="text-gray-500 font-medium">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8 space-y-8 bg-gray-50 min-h-screen">
       <div className="flex justify-between items-end">
@@ -48,7 +121,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
           label="Total Sales" 
-          value="$24,500" 
+          value={`${stats.totalSales.toLocaleString()}`} 
           change="+12.5%" 
           trend="up"
           icon={TrendingUp} 
@@ -56,7 +129,7 @@ export default function Dashboard() {
         />
         <StatCard 
           label="Active Tokens" 
-          value="42" 
+          value={stats.activeTokens.toString()} 
           change="-4.2%" 
           trend="down"
           icon={Clock} 
@@ -64,7 +137,7 @@ export default function Dashboard() {
         />
         <StatCard 
           label="Total Patients" 
-          value="1,240" 
+          value={stats.totalPatients.toLocaleString()} 
           change="+8.1%" 
           trend="up"
           icon={Users} 
@@ -72,7 +145,7 @@ export default function Dashboard() {
         />
         <StatCard 
           label="Orders" 
-          value="156" 
+          value={stats.totalOrders.toString()} 
           change="+14.3%" 
           trend="up"
           icon={ShoppingBag} 
@@ -86,7 +159,7 @@ export default function Dashboard() {
           <h3 className="text-lg font-bold text-gray-900 mb-6">Sales Overview</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={DATA}>
+              <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
@@ -109,7 +182,7 @@ export default function Dashboard() {
           <h3 className="text-lg font-bold text-gray-900 mb-6">Token Traffic</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={DATA}>
+              <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />

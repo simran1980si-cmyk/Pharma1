@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Plus, 
   Search, 
@@ -13,23 +13,41 @@ import {
   PackageX,
   ChevronDown,
   ChevronUp,
-  Layers
+  Layers,
+  Loader2
 } from 'lucide-react';
 import { format, isPast, isBefore, addMonths, addDays } from 'date-fns';
 import { cn } from '../lib/utils';
 import { Medication } from '../types';
-import { MOCK_MEDICATIONS } from '../data';
+import { supabaseService } from '../services/supabaseService';
 
 // Component
 export default function Inventory() {
-  const [medications, setMedications] = useState<Medication[]>(MOCK_MEDICATIONS);
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'soonest' | 'furthest' | 'none'>('none');
   const [filterType, setFilterType] = useState<'all' | 'low-stock' | 'expiring' | 'expiring-7d' | 'expired' | 'price-alerts'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [editingMedication, setEditingMedication] = useState<Medication | null>(null);
   const [expandedMed, setExpandedMed] = useState<string | null>(null);
   const [modalBatches, setModalBatches] = useState<{ batchNumber: string, quantity: number, expirationDate: string }[]>([]);
+
+  useEffect(() => {
+    const fetchMedications = async () => {
+      try {
+        setLoading(true);
+        const data = await supabaseService.getMedications();
+        setMedications(data);
+      } catch (error) {
+        console.error('Error fetching medications:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMedications();
+  }, []);
 
   // When opening modal, initialize modalBatches
   const openAddModal = () => {
@@ -126,9 +144,13 @@ export default function Inventory() {
     return { total, lowStock, expiringSoon, critical7d, expired, priceAlerts };
   }, [medications]);
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this medication?')) {
+  const handleDelete = async (id: string) => {
+    try {
+      await supabaseService.deleteMedication(id);
       setMedications(meds => meds.filter(m => m.id !== id));
+      setShowDeleteConfirm(null);
+    } catch (error) {
+      console.error('Error deleting medication:', error);
     }
   };
 
@@ -289,15 +311,17 @@ export default function Inventory() {
                 <option value="furthest">Furthest First</option>
               </select>
             </div>
-            <button className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-600 bg-gray-50 rounded-xl hover:bg-gray-100 transition-all">
-              <Filter className="w-4 h-4" />
-              Filters
-            </button>
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+              <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+              <p className="text-gray-500 font-medium">Loading inventory...</p>
+            </div>
+          ) : (
+            <table className="w-full text-left">
             <thead>
               <tr className="bg-gray-50/50 text-gray-500 text-xs font-semibold uppercase tracking-wider">
                 <th className="px-6 py-4">Medication Name</th>
@@ -402,7 +426,7 @@ export default function Inventory() {
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button 
-                            onClick={() => handleDelete(med.id)}
+                            onClick={() => setShowDeleteConfirm(med.id)}
                             className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -456,10 +480,37 @@ export default function Inventory() {
               })}
             </tbody>
           </table>
+        )}
         </div>
       </div>
 
-      {/* Add/Edit Modal */}
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-6">
+              <div className="text-center space-y-2">
+                <h3 className="text-xl font-bold text-gray-900">Delete Medication</h3>
+                <p className="text-gray-500">Are you sure you want to delete this medication? This action cannot be undone.</p>
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowDeleteConfirm(null)}
+                  className="flex-1 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-semibold"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => handleDelete(showDeleteConfirm)}
+                  className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors font-semibold shadow-lg shadow-red-600/20"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add/Edit Modal */}
       {(showAddModal || editingMedication) && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -468,41 +519,42 @@ export default function Inventory() {
                 {editingMedication ? 'Edit Medication' : 'Add New Medication'}
               </h3>
             </div>
-            <form className="flex-1 overflow-y-auto p-6 space-y-6" onSubmit={(e) => {
+            <form className="flex-1 overflow-y-auto p-6 space-y-6" onSubmit={async (e) => {
               e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              
-              const batches = modalBatches.filter(b => b.batchNumber && b.quantity > 0);
+              try {
+                const formData = new FormData(e.currentTarget);
+                const batches = modalBatches.filter(b => b.batchNumber && b.quantity > 0);
+                const totalStock = batches.reduce((sum, b) => sum + b.quantity, 0);
+                const earliestExp = batches.length > 0 
+                  ? batches.reduce((min, b) => b.expirationDate < min ? b.expirationDate : min, batches[0].expirationDate)
+                  : '';
 
-              const totalStock = batches.reduce((sum, b) => sum + b.quantity, 0);
-              const earliestExp = batches.length > 0 
-                ? batches.reduce((min, b) => b.expirationDate < min ? b.expirationDate : min, batches[0].expirationDate)
-                : '';
+                const newPrice = Number(formData.get('price'));
+                const medData: any = {
+                  name: formData.get('name') as string,
+                  category: formData.get('category') as string,
+                  stock: totalStock,
+                  reorderThreshold: Number(formData.get('threshold')),
+                  expirationDate: earliestExp,
+                  price: newPrice,
+                  priceAlertThreshold: Number(formData.get('priceAlertThreshold')) / 100 || 0.1,
+                  unit: formData.get('unit') as string,
+                  lastUpdated: new Date().toISOString().split('T')[0],
+                  batches: batches
+                };
 
-              const newPrice = Number(formData.get('price'));
-              const newMed: Medication = {
-                id: editingMedication?.id || Math.random().toString(36).substr(2, 9),
-                name: formData.get('name') as string,
-                category: formData.get('category') as string,
-                stock: totalStock,
-                reorderThreshold: Number(formData.get('threshold')),
-                expirationDate: earliestExp,
-                price: newPrice,
-                previousPrice: editingMedication ? (editingMedication.price !== newPrice ? editingMedication.price : editingMedication.previousPrice) : undefined,
-                priceAlertThreshold: Number(formData.get('priceAlertThreshold')) / 100 || 0.1,
-                unit: formData.get('unit') as string,
-                lastUpdated: new Date().toISOString().split('T')[0],
-                batches: batches
-              };
-
-              if (editingMedication) {
-                setMedications(meds => meds.map(m => m.id === editingMedication.id ? newMed : m));
-              } else {
-                setMedications(meds => [newMed, ...meds]);
+                if (editingMedication) {
+                  await supabaseService.updateMedication(editingMedication.id, medData);
+                } else {
+                  await supabaseService.addMedication(medData);
+                }
+                const updatedMeds = await supabaseService.getMedications();
+                setMedications(updatedMeds);
+                setShowAddModal(false);
+                setEditingMedication(null);
+              } catch (error) {
+                console.error('Error saving medication:', error);
               }
-              
-              setShowAddModal(false);
-              setEditingMedication(null);
             }}>
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-4">

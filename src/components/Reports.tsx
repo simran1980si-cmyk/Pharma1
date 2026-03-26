@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -12,7 +12,8 @@ import {
   ArrowDownRight,
   PieChart as PieChartIcon,
   BarChart as BarChartIcon,
-  Activity
+  Activity,
+  Loader2
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -32,7 +33,8 @@ import {
   Line
 } from 'recharts';
 import { cn } from '../lib/utils';
-import { MOCK_MEDICATIONS } from '../data';
+import { Medication } from '../types';
+import { supabaseService } from '../services/supabaseService';
 
 const SALES_DATA = [
   { name: 'Jan', sales: 45000, profit: 12000 },
@@ -61,14 +63,31 @@ const TOP_PRODUCTS = [
 
 export default function Reports() {
   const [timeRange, setTimeRange] = useState('6M');
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchMedications = async () => {
+      try {
+        setLoading(true);
+        const data = await supabaseService.getMedications();
+        setMedications(data);
+      } catch (error) {
+        console.error('Error fetching medications for reports:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMedications();
+  }, []);
 
   const priceAlertMedications = useMemo(() => {
-    return MOCK_MEDICATIONS.filter(m => {
+    return medications.filter(m => {
       if (!m.previousPrice || !m.priceHistory) return false;
       const threshold = m.priceAlertThreshold || 0.1;
       return Math.abs((m.price - m.previousPrice) / m.previousPrice) >= threshold;
     });
-  }, []);
+  }, [medications]);
 
   // Prepare data for the multi-line chart
   // We need a unique set of dates

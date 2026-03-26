@@ -35,7 +35,10 @@ export default function Warehouse() {
   const [activeTab, setActiveTab] = useState<'orders' | 'suppliers'>('orders');
   const [searchQuery, setSearchQuery] = useState('');
   const [showOrderModal, setShowOrderModal] = useState(false);
+  const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [orders, setOrders] = useState<PurchaseOrder[]>(MOCK_ORDERS);
+  const [suppliers, setSuppliers] = useState<Supplier[]>(MOCK_SUPPLIERS);
   
   const [newOrder, setNewOrder] = useState({
     supplierId: '',
@@ -43,19 +46,57 @@ export default function Warehouse() {
     items: [{ medicationId: '', name: '', quantity: 1, unitPrice: 0 }]
   });
 
+  const [newSupplier, setNewSupplier] = useState({
+    name: '',
+    contactPerson: '',
+    email: '',
+    phone: '',
+    category: 'General',
+    address: '',
+    notes: ''
+  });
+
+  const handleEditSupplier = (supplier: Supplier) => {
+    setEditingSupplier(supplier);
+    setNewSupplier({
+      name: supplier.name,
+      contactPerson: supplier.contactPerson,
+      email: supplier.email,
+      phone: supplier.phone,
+      category: supplier.category,
+      address: supplier.address,
+      notes: supplier.notes || ''
+    });
+    setShowSupplierModal(true);
+  };
+
+  const resetSupplierForm = () => {
+    setShowSupplierModal(false);
+    setEditingSupplier(null);
+    setNewSupplier({
+      name: '',
+      contactPerson: '',
+      email: '',
+      phone: '',
+      category: 'General',
+      address: '',
+      notes: ''
+    });
+  };
+
   const filteredOrders = useMemo(() => {
     return orders.filter(order => 
       order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      MOCK_SUPPLIERS.find(s => s.id === order.supplierId)?.name.toLowerCase().includes(searchQuery.toLowerCase())
+      suppliers.find(s => s.id === order.supplierId)?.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [orders, searchQuery]);
+  }, [orders, searchQuery, suppliers]);
 
   const filteredSuppliers = useMemo(() => {
-    return MOCK_SUPPLIERS.filter(supplier => 
+    return suppliers.filter(supplier => 
       supplier.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       supplier.contactPerson.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [searchQuery]);
+  }, [searchQuery, suppliers]);
 
   const getStatusConfig = (status: PurchaseOrder['status']) => {
     switch (status) {
@@ -74,7 +115,7 @@ export default function Warehouse() {
           <p className="text-gray-500 mt-1">Manage bulk orders and supplier relationships.</p>
         </div>
         <button 
-          onClick={() => setShowOrderModal(true)}
+          onClick={() => activeTab === 'orders' ? setShowOrderModal(true) : setShowSupplierModal(true)}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 font-medium transition-all shadow-sm"
         >
           <Plus className="w-5 h-5" />
@@ -134,7 +175,7 @@ export default function Warehouse() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredOrders.map((order) => {
-                  const supplier = MOCK_SUPPLIERS.find(s => s.id === order.supplierId);
+                  const supplier = suppliers.find(s => s.id === order.supplierId);
                   const config = getStatusConfig(order.status);
                   return (
                     <tr key={order.id} className="hover:bg-gray-50/50 transition-colors group">
@@ -214,8 +255,11 @@ export default function Warehouse() {
                     <Package className="w-4 h-4" />
                     12 Active Orders
                   </div>
-                  <button className="text-xs font-bold text-gray-400 hover:text-blue-600 transition-colors">
-                    View Profile
+                  <button 
+                    onClick={() => handleEditSupplier(supplier)}
+                    className="text-xs font-bold text-gray-400 hover:text-blue-600 transition-colors"
+                  >
+                    Edit Details
                   </button>
                 </div>
               </div>
@@ -261,7 +305,7 @@ export default function Warehouse() {
                     required
                   >
                     <option value="">Select Supplier</option>
-                    {MOCK_SUPPLIERS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1">
@@ -275,6 +319,15 @@ export default function Warehouse() {
                   />
                 </div>
               </div>
+
+              {newOrder.supplierId && (
+                <div className="space-y-1 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Supplier Notes (Read-only)</label>
+                  <div className="w-full px-4 py-3 bg-blue-50/30 border border-blue-100/50 rounded-xl text-xs text-gray-600 italic">
+                    {suppliers.find(s => s.id === newOrder.supplierId)?.notes || "No special notes for this supplier."}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
@@ -378,6 +431,128 @@ export default function Warehouse() {
                     Create Order
                   </button>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Supplier Modal */}
+      {showSupplierModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="text-xl font-bold text-gray-900">
+                {editingSupplier ? 'Edit Supplier' : 'Add New Supplier'}
+              </h3>
+            </div>
+            
+            <form className="flex-1 overflow-y-auto p-6 space-y-6" onSubmit={(e) => {
+              e.preventDefault();
+              if (editingSupplier) {
+                const updatedSupplier: Supplier = {
+                  ...editingSupplier,
+                  ...newSupplier
+                };
+                setSuppliers(prev => prev.map(s => s.id === editingSupplier.id ? updatedSupplier : s));
+              } else {
+                const supplier: Supplier = {
+                  id: (suppliers.length + 1).toString(),
+                  ...newSupplier
+                };
+                setSuppliers(prev => [supplier, ...prev]);
+              }
+              resetSupplierForm();
+            }}>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Supplier Name</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm"
+                    value={newSupplier.name}
+                    onChange={(e) => setNewSupplier({...newSupplier, name: e.target.value})}
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Category</label>
+                  <select 
+                    className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm"
+                    value={newSupplier.category}
+                    onChange={(e) => setNewSupplier({...newSupplier, category: e.target.value})}
+                    required
+                  >
+                    <option value="General">General</option>
+                    <option value="Specialized">Specialized</option>
+                    <option value="Antibiotics">Antibiotics</option>
+                    <option value="Equipment">Equipment</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Contact Person</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm"
+                    value={newSupplier.contactPerson}
+                    onChange={(e) => setNewSupplier({...newSupplier, contactPerson: e.target.value})}
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Phone Number</label>
+                  <input 
+                    type="tel" 
+                    className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm"
+                    value={newSupplier.phone}
+                    onChange={(e) => setNewSupplier({...newSupplier, phone: e.target.value})}
+                    required
+                  />
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Email Address</label>
+                  <input 
+                    type="email" 
+                    className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm"
+                    value={newSupplier.email}
+                    onChange={(e) => setNewSupplier({...newSupplier, email: e.target.value})}
+                    required
+                  />
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Address</label>
+                  <textarea 
+                    className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm min-h-[80px]"
+                    value={newSupplier.address}
+                    onChange={(e) => setNewSupplier({...newSupplier, address: e.target.value})}
+                    required
+                  />
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Notes (Optional)</label>
+                  <textarea 
+                    className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm min-h-[100px]"
+                    placeholder="Add any additional information about this supplier..."
+                    value={newSupplier.notes}
+                    onChange={(e) => setNewSupplier({...newSupplier, notes: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
+                <button 
+                  type="button"
+                  onClick={resetSupplierForm}
+                  className="px-6 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  className="px-6 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
+                >
+                  {editingSupplier ? 'Save Changes' : 'Add Supplier'}
+                </button>
               </div>
             </form>
           </div>

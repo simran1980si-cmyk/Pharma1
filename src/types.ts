@@ -1,3 +1,9 @@
+export type Batch = {
+  batchNumber: string;
+  quantity: number;
+  expirationDate: string;
+};
+
 export type Medication = {
   id: string;
   name: string;
@@ -8,6 +14,7 @@ export type Medication = {
   price: number;
   unit: string;
   lastUpdated: string;
+  batches: Batch[];
 };
 
 export type InventoryLog = {

@@ -17,9 +17,42 @@ import { Medication, SaleItem, Token } from '../types';
 
 // Mock data (reuse from Inventory if possible, but for now local)
 const MOCK_MEDICATIONS: Medication[] = [
-  { id: '1', name: 'Amoxicillin 500mg', category: 'Antibiotics', stock: 15, reorderThreshold: 20, expirationDate: '2026-05-15', price: 12.50, unit: 'Capsules', lastUpdated: '2026-03-25' },
-  { id: '2', name: 'Lisinopril 10mg', category: 'Hypertension', stock: 120, reorderThreshold: 50, expirationDate: '2027-01-10', price: 8.00, unit: 'Tablets', lastUpdated: '2026-03-24' },
-  { id: '3', name: 'Atorvastatin 20mg', category: 'Cholesterol', stock: 8, reorderThreshold: 30, expirationDate: '2026-04-01', price: 15.20, unit: 'Tablets', lastUpdated: '2026-03-26' },
+  { 
+    id: '1', 
+    name: 'Amoxicillin 500mg', 
+    category: 'Antibiotics', 
+    stock: 15, 
+    reorderThreshold: 20, 
+    expirationDate: '2026-05-15', 
+    price: 12.50, 
+    unit: 'Capsules', 
+    lastUpdated: '2026-03-25',
+    batches: [{ batchNumber: 'BAT-001', quantity: 15, expirationDate: '2026-05-15' }]
+  },
+  { 
+    id: '2', 
+    name: 'Lisinopril 10mg', 
+    category: 'Hypertension', 
+    stock: 120, 
+    reorderThreshold: 50, 
+    expirationDate: '2027-01-10', 
+    price: 8.00, 
+    unit: 'Tablets', 
+    lastUpdated: '2026-03-24',
+    batches: [{ batchNumber: 'BAT-003', quantity: 120, expirationDate: '2027-01-10' }]
+  },
+  { 
+    id: '3', 
+    name: 'Atorvastatin 20mg', 
+    category: 'Cholesterol', 
+    stock: 8, 
+    reorderThreshold: 30, 
+    expirationDate: '2026-04-01', 
+    price: 15.20, 
+    unit: 'Tablets', 
+    lastUpdated: '2026-03-26',
+    batches: [{ batchNumber: 'BAT-004', quantity: 8, expirationDate: '2026-04-01' }]
+  },
 ];
 
 const MOCK_TOKENS: Token[] = [

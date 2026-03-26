@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Plus, 
   Search, 
@@ -10,37 +10,147 @@ import {
   Filter,
   Calendar,
   PackageCheck,
-  PackageX
+  PackageX,
+  ChevronDown,
+  ChevronUp,
+  Layers
 } from 'lucide-react';
-import { format, isPast, isBefore, addMonths } from 'date-fns';
+import { format, isPast, isBefore, addMonths, addDays } from 'date-fns';
 import { cn } from '../lib/utils';
 import { Medication } from '../types';
 
 // Mock data for now
 const MOCK_MEDICATIONS: Medication[] = [
-  { id: '1', name: 'Amoxicillin 500mg', category: 'Antibiotics', stock: 15, reorderThreshold: 20, expirationDate: '2026-05-15', price: 12.50, unit: 'Capsules', lastUpdated: '2026-03-25' },
-  { id: '2', name: 'Lisinopril 10mg', category: 'Hypertension', stock: 120, reorderThreshold: 50, expirationDate: '2027-01-10', price: 8.00, unit: 'Tablets', lastUpdated: '2026-03-24' },
-  { id: '3', name: 'Atorvastatin 20mg', category: 'Cholesterol', stock: 8, reorderThreshold: 30, expirationDate: '2026-04-01', price: 15.20, unit: 'Tablets', lastUpdated: '2026-03-26' },
-  { id: '4', name: 'Metformin 500mg', category: 'Diabetes', stock: 250, reorderThreshold: 100, expirationDate: '2026-12-20', price: 5.50, unit: 'Tablets', lastUpdated: '2026-03-20' },
-  { id: '5', name: 'Ibuprofen 400mg', category: 'Pain Relief', stock: 45, reorderThreshold: 50, expirationDate: '2026-03-30', price: 6.75, unit: 'Tablets', lastUpdated: '2026-03-22' },
+  { 
+    id: '1', 
+    name: 'Amoxicillin 500mg', 
+    category: 'Antibiotics', 
+    stock: 15, 
+    reorderThreshold: 20, 
+    expirationDate: '2026-05-15', 
+    price: 12.50, 
+    unit: 'Capsules', 
+    lastUpdated: '2026-03-25',
+    batches: [
+      { batchNumber: 'BAT-001', quantity: 10, expirationDate: '2026-05-15' },
+      { batchNumber: 'BAT-002', quantity: 5, expirationDate: '2026-06-20' }
+    ]
+  },
+  { 
+    id: '2', 
+    name: 'Lisinopril 10mg', 
+    category: 'Hypertension', 
+    stock: 120, 
+    reorderThreshold: 50, 
+    expirationDate: '2027-01-10', 
+    price: 8.00, 
+    unit: 'Tablets', 
+    lastUpdated: '2026-03-24',
+    batches: [
+      { batchNumber: 'BAT-003', quantity: 120, expirationDate: '2027-01-10' }
+    ]
+  },
+  { 
+    id: '3', 
+    name: 'Atorvastatin 20mg', 
+    category: 'Cholesterol', 
+    stock: 8, 
+    reorderThreshold: 30, 
+    expirationDate: '2026-04-01', 
+    price: 15.20, 
+    unit: 'Tablets', 
+    lastUpdated: '2026-03-26',
+    batches: [
+      { batchNumber: 'BAT-004', quantity: 8, expirationDate: '2026-04-01' }
+    ]
+  },
+  { 
+    id: '4', 
+    name: 'Metformin 500mg', 
+    category: 'Diabetes', 
+    stock: 250, 
+    reorderThreshold: 100, 
+    expirationDate: '2026-12-20', 
+    price: 5.50, 
+    unit: 'Tablets', 
+    lastUpdated: '2026-03-20',
+    batches: [
+      { batchNumber: 'BAT-005', quantity: 250, expirationDate: '2026-12-20' }
+    ]
+  },
+  { 
+    id: '5', 
+    name: 'Ibuprofen 400mg', 
+    category: 'Pain Relief', 
+    stock: 45, 
+    reorderThreshold: 50, 
+    expirationDate: '2026-03-30', 
+    price: 6.75, 
+    unit: 'Tablets', 
+    lastUpdated: '2026-03-22',
+    batches: [
+      { batchNumber: 'BAT-006', quantity: 45, expirationDate: '2026-03-30' }
+    ]
+  },
 ];
 
 export default function Inventory() {
   const [medications, setMedications] = useState<Medication[]>(MOCK_MEDICATIONS);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState<'soonest' | 'furthest' | 'none'>('none');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingMedication, setEditingMedication] = useState<Medication | null>(null);
+  const [expandedMed, setExpandedMed] = useState<string | null>(null);
+  const [modalBatches, setModalBatches] = useState<{ batchNumber: string, quantity: number, expirationDate: string }[]>([]);
+
+  // When opening modal, initialize modalBatches
+  const openAddModal = () => {
+    setModalBatches([{ batchNumber: '', quantity: 0, expirationDate: '' }]);
+    setShowAddModal(true);
+  };
+
+  const openEditModal = (med: Medication) => {
+    setEditingMedication(med);
+    setModalBatches(med.batches.length > 0 ? [...med.batches] : [{ batchNumber: '', quantity: 0, expirationDate: '' }]);
+  };
+
+  const addBatchToModal = () => {
+    setModalBatches([...modalBatches, { batchNumber: '', quantity: 0, expirationDate: '' }]);
+  };
+
+  const updateModalBatch = (index: number, field: string, value: any) => {
+    const newBatches = [...modalBatches];
+    newBatches[index] = { ...newBatches[index], [field]: value };
+    setModalBatches(newBatches);
+  };
+
+  const removeModalBatch = (index: number) => {
+    if (modalBatches.length > 1) {
+      setModalBatches(modalBatches.filter((_, i) => i !== index));
+    }
+  };
 
   const filteredMedications = useMemo(() => {
-    return medications.filter(med => 
+    let result = medications.filter(med => 
       med.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       med.category.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [medications, searchQuery]);
+
+    if (sortOrder === 'soonest') {
+      result.sort((a, b) => new Date(a.expirationDate).getTime() - new Date(b.expirationDate).getTime());
+    } else if (sortOrder === 'furthest') {
+      result.sort((a, b) => new Date(b.expirationDate).getTime() - new Date(a.expirationDate).getTime());
+    }
+
+    return result;
+  }, [medications, searchQuery, sortOrder]);
 
   const stats = useMemo(() => {
     const total = medications.length;
-    const lowStock = medications.filter(m => m.stock <= m.reorderThreshold).length;
+    const lowStock = medications.filter(m => {
+      const usableStock = m.batches.reduce((sum, b) => isPast(new Date(b.expirationDate)) ? sum : sum + b.quantity, 0);
+      return usableStock <= m.reorderThreshold;
+    }).length;
     const expiringSoon = medications.filter(m => {
       const expDate = new Date(m.expirationDate);
       return isBefore(expDate, addMonths(new Date(), 3)) && !isPast(expDate);
@@ -64,9 +174,14 @@ export default function Inventory() {
 
   const getExpirationStatus = (dateStr: string) => {
     const date = new Date(dateStr);
-    if (isPast(date)) return { label: 'Expired', color: 'text-red-500' };
-    if (isBefore(date, addMonths(new Date(), 3))) return { label: 'Expiring Soon', color: 'text-amber-500' };
-    return { label: format(date, 'MMM dd, yyyy'), color: 'text-gray-600' };
+    const today = new Date();
+    const thirtyDaysFromNow = addDays(today, 30);
+    const threeMonthsFromNow = addMonths(today, 3);
+
+    if (isPast(date)) return { label: 'Expired', color: 'text-red-600 font-bold', isCritical: true };
+    if (isBefore(date, thirtyDaysFromNow)) return { label: 'Expiring < 30d', color: 'text-red-500 font-bold', isCritical: true };
+    if (isBefore(date, threeMonthsFromNow)) return { label: 'Expiring Soon', color: 'text-amber-500', isCritical: false };
+    return { label: format(date, 'MMM dd, yyyy'), color: 'text-gray-600', isCritical: false };
   };
 
   return (
@@ -77,7 +192,7 @@ export default function Inventory() {
           <p className="text-gray-500 mt-1">Manage your pharmacy stock and reorder alerts.</p>
         </div>
         <button 
-          onClick={() => setShowAddModal(true)}
+          onClick={openAddModal}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 font-medium transition-all shadow-sm"
         >
           <Plus className="w-5 h-5" />
@@ -130,6 +245,18 @@ export default function Inventory() {
             />
           </div>
           <div className="flex gap-2 w-full md:w-auto">
+            <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-xl border border-transparent focus-within:border-blue-500/20 transition-all">
+              <Calendar className="w-4 h-4 text-gray-400" />
+              <select 
+                className="bg-transparent border-none text-sm font-medium text-gray-600 focus:ring-0 cursor-pointer outline-none"
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as any)}
+              >
+                <option value="none">No Expiration Sort</option>
+                <option value="soonest">Soonest First</option>
+                <option value="furthest">Furthest First</option>
+              </select>
+            </div>
             <button className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-600 bg-gray-50 rounded-xl hover:bg-gray-100 transition-all">
               <Filter className="w-4 h-4" />
               Filters
@@ -152,68 +279,118 @@ export default function Inventory() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredMedications.map((med) => {
-                const status = getStockStatus(med);
+                const usableStock = med.batches.reduce((sum, b) => isPast(new Date(b.expirationDate)) ? sum : sum + b.quantity, 0);
+                const status = getStockStatus({ ...med, stock: usableStock });
                 const expStatus = getExpirationStatus(med.expirationDate);
+                const isExpanded = expandedMed === med.id;
+
                 return (
-                  <tr key={med.id} className="hover:bg-gray-50/50 transition-colors group">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900">{med.name}</div>
-                      <div className="text-xs text-gray-500">{med.unit}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-sm text-gray-600">{med.category}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className={cn(
-                          "text-sm font-semibold",
-                          med.stock <= med.reorderThreshold ? "text-amber-600" : "text-gray-900"
+                  <React.Fragment key={med.id}>
+                    <tr className="hover:bg-gray-50/50 transition-colors group border-b border-gray-50">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <button 
+                            onClick={() => setExpandedMed(isExpanded ? null : med.id)}
+                            className="p-1 hover:bg-gray-100 rounded-md transition-colors"
+                          >
+                            {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                          </button>
+                          <div>
+                            <div className="font-medium text-gray-900">{med.name}</div>
+                            <div className="text-xs text-gray-500">{med.unit}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm text-gray-600">{med.category}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            "text-sm font-semibold",
+                            usableStock <= med.reorderThreshold ? "text-amber-600" : "text-gray-900"
+                          )}>
+                            {usableStock}
+                          </span>
+                          <span className="text-xs text-gray-400">/ {med.reorderThreshold} min</span>
+                        </div>
+                        <div className="w-24 h-1.5 bg-gray-100 rounded-full mt-1.5 overflow-hidden">
+                          <div 
+                            className={cn(
+                              "h-full rounded-full transition-all",
+                              usableStock === 0 ? "bg-red-500" : 
+                              usableStock <= med.reorderThreshold ? "bg-amber-500" : "bg-emerald-500"
+                            )}
+                            style={{ width: `${Math.min((usableStock / (med.reorderThreshold * 2)) * 100, 100)}%` }}
+                          />
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className={cn(
+                          "flex items-center gap-1.5 px-2 py-1 rounded-lg w-fit",
+                          expStatus.isCritical ? "bg-red-50" : ""
                         )}>
-                          {med.stock}
+                          {expStatus.isCritical && <AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
+                          <span className={cn("text-sm font-medium", expStatus.color)}>
+                            {expStatus.label}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        ${med.price.toFixed(2)}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider", status.color)}>
+                          {status.label}
                         </span>
-                        <span className="text-xs text-gray-400">/ {med.reorderThreshold} min</span>
-                      </div>
-                      <div className="w-24 h-1.5 bg-gray-100 rounded-full mt-1.5 overflow-hidden">
-                        <div 
-                          className={cn(
-                            "h-full rounded-full transition-all",
-                            med.stock === 0 ? "bg-red-500" : 
-                            med.stock <= med.reorderThreshold ? "bg-amber-500" : "bg-emerald-500"
-                          )}
-                          style={{ width: `${Math.min((med.stock / (med.reorderThreshold * 2)) * 100, 100)}%` }}
-                        />
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={cn("text-sm font-medium", expStatus.color)}>
-                        {expStatus.label}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      ${med.price.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider", status.color)}>
-                        {status.label}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button 
-                          onClick={() => setEditingMedication(med)}
-                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(med.id)}
-                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button 
+                            onClick={() => openEditModal(med)}
+                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(med.id)}
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="bg-gray-50/30">
+                        <td colSpan={7} className="px-12 py-4">
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                              <Layers className="w-3 h-3" />
+                              Batch Details
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                              {med.batches.map((batch, bIdx) => {
+                                const bExpStatus = getExpirationStatus(batch.expirationDate);
+                                return (
+                                  <div key={bIdx} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex justify-between items-center">
+                                    <div>
+                                      <p className="text-[10px] font-bold text-gray-400 uppercase">Batch #{batch.batchNumber}</p>
+                                      <p className="text-sm font-bold text-gray-900">{batch.quantity} {med.unit}</p>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="text-[10px] font-bold text-gray-400 uppercase">Expires</p>
+                                      <p className={cn("text-xs font-medium", bExpStatus.color)}>{batch.expirationDate}</p>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })}
             </tbody>
@@ -221,28 +398,37 @@ export default function Inventory() {
         </div>
       </div>
 
-      {/* Add/Edit Modal (Simplified for now) */}
+      {/* Add/Edit Modal */}
       {(showAddModal || editingMedication) && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-gray-100">
               <h3 className="text-xl font-bold text-gray-900">
                 {editingMedication ? 'Edit Medication' : 'Add New Medication'}
               </h3>
             </div>
-            <form className="p-6 space-y-4" onSubmit={(e) => {
+            <form className="flex-1 overflow-y-auto p-6 space-y-6" onSubmit={(e) => {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
+              
+              const batches = modalBatches.filter(b => b.batchNumber && b.quantity > 0);
+
+              const totalStock = batches.reduce((sum, b) => sum + b.quantity, 0);
+              const earliestExp = batches.length > 0 
+                ? batches.reduce((min, b) => b.expirationDate < min ? b.expirationDate : min, batches[0].expirationDate)
+                : '';
+
               const newMed: Medication = {
                 id: editingMedication?.id || Math.random().toString(36).substr(2, 9),
                 name: formData.get('name') as string,
                 category: formData.get('category') as string,
-                stock: Number(formData.get('stock')),
+                stock: totalStock,
                 reorderThreshold: Number(formData.get('threshold')),
-                expirationDate: formData.get('expirationDate') as string,
+                expirationDate: earliestExp,
                 price: Number(formData.get('price')),
                 unit: formData.get('unit') as string,
                 lastUpdated: new Date().toISOString().split('T')[0],
+                batches: batches
               };
 
               if (editingMedication) {
@@ -254,40 +440,98 @@ export default function Inventory() {
               setShowAddModal(false);
               setEditingMedication(null);
             }}>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-500 uppercase">Name</label>
-                <input name="name" type="text" defaultValue={editingMedication?.name} className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm" placeholder="e.g. Amoxicillin" required />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-500 uppercase">Category</label>
-                <input name="category" type="text" defaultValue={editingMedication?.category} className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm" placeholder="e.g. Antibiotics" required />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-gray-500 uppercase">Stock</label>
-                  <input name="stock" type="number" defaultValue={editingMedication?.stock} className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm" required />
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Name</label>
+                    <input name="name" type="text" defaultValue={editingMedication?.name} className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm" placeholder="e.g. Amoxicillin" required />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Category</label>
+                    <input name="category" type="text" defaultValue={editingMedication?.category} className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm" placeholder="e.g. Antibiotics" required />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-gray-500 uppercase">Price ($)</label>
+                      <input name="price" type="number" step="0.01" defaultValue={editingMedication?.price} className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm" required />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-gray-500 uppercase">Unit</label>
+                      <input name="unit" type="text" defaultValue={editingMedication?.unit} className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm" placeholder="e.g. Tablets" required />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Reorder Threshold</label>
+                    <input name="threshold" type="number" defaultValue={editingMedication?.reorderThreshold} className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm" required />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-gray-500 uppercase">Threshold</label>
-                  <input name="threshold" type="number" defaultValue={editingMedication?.reorderThreshold} className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm" required />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-gray-500 uppercase">Price ($)</label>
-                  <input name="price" type="number" step="0.01" defaultValue={editingMedication?.price} className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm" required />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-gray-500 uppercase">Unit</label>
-                  <input name="unit" type="text" defaultValue={editingMedication?.unit} className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm" placeholder="e.g. Tablets" required />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-gray-500 uppercase">Expiration Date</label>
-                <input name="expirationDate" type="date" defaultValue={editingMedication?.expirationDate} className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm" required />
-              </div>
-              <div className="flex gap-3 pt-4">
 
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Batches</label>
+                    <button 
+                      type="button"
+                      onClick={addBatchToModal}
+                      className="text-[10px] font-bold text-blue-600 uppercase"
+                    >
+                      + Add Batch
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+                    {modalBatches.map((batch, i) => (
+                      <div key={i} className="p-3 bg-gray-50 rounded-xl space-y-3 border border-gray-100 relative group/batch">
+                        {modalBatches.length > 1 && (
+                          <button 
+                            type="button"
+                            onClick={() => removeModalBatch(i)}
+                            className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover/batch:opacity-100 transition-opacity"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">Batch #</label>
+                            <input 
+                              name="batchNumber" 
+                              type="text" 
+                              value={batch.batchNumber} 
+                              onChange={(e) => updateModalBatch(i, 'batchNumber', e.target.value)}
+                              className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs" 
+                              required 
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-400 uppercase">Quantity</label>
+                            <input 
+                              name="batchQuantity" 
+                              type="number" 
+                              value={batch.quantity} 
+                              onChange={(e) => updateModalBatch(i, 'quantity', Number(e.target.value))}
+                              className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs" 
+                              required 
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-400 uppercase">Expiration</label>
+                          <input 
+                            name="batchExpiration" 
+                            type="date" 
+                            value={batch.expirationDate} 
+                            onChange={(e) => updateModalBatch(i, 'expirationDate', e.target.value)}
+                            className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs" 
+                            required 
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-6 border-t border-gray-100">
                 <button 
                   type="button"
                   onClick={() => { setShowAddModal(false); setEditingMedication(null); }}
@@ -299,7 +543,7 @@ export default function Inventory() {
                   type="submit"
                   className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
                 >
-                  Save Changes
+                  {editingMedication ? 'Save Changes' : 'Add Medication'}
                 </button>
               </div>
             </form>

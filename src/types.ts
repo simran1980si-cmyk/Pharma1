@@ -12,6 +12,8 @@ export type Medication = {
   reorderThreshold: number;
   expirationDate: string;
   price: number;
+  previousPrice?: number;
+  priceAlertThreshold?: number;
   unit: string;
   lastUpdated: string;
   batches: Batch[];
@@ -71,6 +73,7 @@ export type PurchaseOrder = {
   items: {
     medicationId: string;
     name: string;
+    batchNumber?: string;
     quantity: number;
     unitPrice: number;
   }[];

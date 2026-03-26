@@ -18,86 +18,14 @@ import {
 import { format, isPast, isBefore, addMonths, addDays } from 'date-fns';
 import { cn } from '../lib/utils';
 import { Medication } from '../types';
+import { MOCK_MEDICATIONS } from '../data';
 
-// Mock data for now
-const MOCK_MEDICATIONS: Medication[] = [
-  { 
-    id: '1', 
-    name: 'Amoxicillin 500mg', 
-    category: 'Antibiotics', 
-    stock: 15, 
-    reorderThreshold: 20, 
-    expirationDate: '2026-05-15', 
-    price: 12.50, 
-    unit: 'Capsules', 
-    lastUpdated: '2026-03-25',
-    batches: [
-      { batchNumber: 'BAT-001', quantity: 10, expirationDate: '2026-05-15' },
-      { batchNumber: 'BAT-002', quantity: 5, expirationDate: '2026-06-20' }
-    ]
-  },
-  { 
-    id: '2', 
-    name: 'Lisinopril 10mg', 
-    category: 'Hypertension', 
-    stock: 120, 
-    reorderThreshold: 50, 
-    expirationDate: '2027-01-10', 
-    price: 8.00, 
-    unit: 'Tablets', 
-    lastUpdated: '2026-03-24',
-    batches: [
-      { batchNumber: 'BAT-003', quantity: 120, expirationDate: '2027-01-10' }
-    ]
-  },
-  { 
-    id: '3', 
-    name: 'Atorvastatin 20mg', 
-    category: 'Cholesterol', 
-    stock: 8, 
-    reorderThreshold: 30, 
-    expirationDate: '2026-04-01', 
-    price: 15.20, 
-    unit: 'Tablets', 
-    lastUpdated: '2026-03-26',
-    batches: [
-      { batchNumber: 'BAT-004', quantity: 8, expirationDate: '2026-04-01' }
-    ]
-  },
-  { 
-    id: '4', 
-    name: 'Metformin 500mg', 
-    category: 'Diabetes', 
-    stock: 250, 
-    reorderThreshold: 100, 
-    expirationDate: '2026-12-20', 
-    price: 5.50, 
-    unit: 'Tablets', 
-    lastUpdated: '2026-03-20',
-    batches: [
-      { batchNumber: 'BAT-005', quantity: 250, expirationDate: '2026-12-20' }
-    ]
-  },
-  { 
-    id: '5', 
-    name: 'Ibuprofen 400mg', 
-    category: 'Pain Relief', 
-    stock: 45, 
-    reorderThreshold: 50, 
-    expirationDate: '2026-03-30', 
-    price: 6.75, 
-    unit: 'Tablets', 
-    lastUpdated: '2026-03-22',
-    batches: [
-      { batchNumber: 'BAT-006', quantity: 45, expirationDate: '2026-03-30' }
-    ]
-  },
-];
-
+// Component
 export default function Inventory() {
   const [medications, setMedications] = useState<Medication[]>(MOCK_MEDICATIONS);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'soonest' | 'furthest' | 'none'>('none');
+  const [filterType, setFilterType] = useState<'all' | 'low-stock' | 'expiring' | 'expired' | 'price-alerts'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingMedication, setEditingMedication] = useState<Medication | null>(null);
   const [expandedMed, setExpandedMed] = useState<string | null>(null);
@@ -136,6 +64,26 @@ export default function Inventory() {
       med.category.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    if (filterType === 'low-stock') {
+      result = result.filter(m => {
+        const usableStock = m.batches.reduce((sum, b) => isPast(new Date(b.expirationDate)) ? sum : sum + b.quantity, 0);
+        return usableStock <= m.reorderThreshold;
+      });
+    } else if (filterType === 'expiring') {
+      result = result.filter(m => {
+        const expDate = new Date(m.expirationDate);
+        return isBefore(expDate, addMonths(new Date(), 3)) && !isPast(expDate);
+      });
+    } else if (filterType === 'expired') {
+      result = result.filter(m => isPast(new Date(m.expirationDate)));
+    } else if (filterType === 'price-alerts') {
+      result = result.filter(m => {
+        if (!m.previousPrice) return false;
+        const threshold = m.priceAlertThreshold || 0.1;
+        return Math.abs((m.price - m.previousPrice) / m.previousPrice) >= threshold;
+      });
+    }
+
     if (sortOrder === 'soonest') {
       result.sort((a, b) => new Date(a.expirationDate).getTime() - new Date(b.expirationDate).getTime());
     } else if (sortOrder === 'furthest') {
@@ -155,9 +103,18 @@ export default function Inventory() {
       const expDate = new Date(m.expirationDate);
       return isBefore(expDate, addMonths(new Date(), 3)) && !isPast(expDate);
     }).length;
+    const criticalExpiring = medications.filter(m => {
+      const expDate = new Date(m.expirationDate);
+      return isBefore(expDate, addDays(new Date(), 30)) && !isPast(expDate);
+    }).length;
     const expired = medications.filter(m => isPast(new Date(m.expirationDate))).length;
+    const priceAlerts = medications.filter(m => {
+      if (!m.previousPrice) return false;
+      const threshold = m.priceAlertThreshold || 0.1;
+      return Math.abs((m.price - m.previousPrice) / m.previousPrice) >= threshold;
+    }).length;
 
-    return { total, lowStock, expiringSoon, expired };
+    return { total, lowStock, expiringSoon, expired, priceAlerts };
   }, [medications]);
 
   const handleDelete = (id: string) => {
@@ -175,13 +132,15 @@ export default function Inventory() {
   const getExpirationStatus = (dateStr: string) => {
     const date = new Date(dateStr);
     const today = new Date();
+    const sevenDaysFromNow = addDays(today, 7);
     const thirtyDaysFromNow = addDays(today, 30);
     const threeMonthsFromNow = addMonths(today, 3);
 
-    if (isPast(date)) return { label: 'Expired', color: 'text-red-600 font-bold', isCritical: true };
-    if (isBefore(date, thirtyDaysFromNow)) return { label: 'Expiring < 30d', color: 'text-red-500 font-bold', isCritical: true };
-    if (isBefore(date, threeMonthsFromNow)) return { label: 'Expiring Soon', color: 'text-amber-500', isCritical: false };
-    return { label: format(date, 'MMM dd, yyyy'), color: 'text-gray-600', isCritical: false };
+    if (isPast(date)) return { label: 'Expired', color: 'text-red-600 font-bold', isCritical: true, isUrgent: true };
+    if (isBefore(date, sevenDaysFromNow)) return { label: 'CRITICAL: < 7d', color: 'text-red-700 font-black animate-pulse', isCritical: true, isUrgent: true };
+    if (isBefore(date, thirtyDaysFromNow)) return { label: 'Expiring < 30d', color: 'text-red-500 font-bold', isCritical: true, isUrgent: false };
+    if (isBefore(date, threeMonthsFromNow)) return { label: 'Expiring Soon', color: 'text-amber-500', isCritical: false, isUrgent: false };
+    return { label: format(date, 'MMM dd, yyyy'), color: 'text-gray-600', isCritical: false, isUrgent: false };
   };
 
   return (
@@ -201,34 +160,82 @@ export default function Inventory() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard 
-          label="Total Medications" 
-          value={stats.total} 
-          icon={PackageCheck} 
-          color="blue" 
-        />
-        <StatCard 
-          label="Low Stock Alerts" 
-          value={stats.lowStock} 
-          icon={AlertTriangle} 
-          color="amber" 
-          alert={stats.lowStock > 0}
-        />
-        <StatCard 
-          label="Expiring Soon" 
-          value={stats.expiringSoon} 
-          icon={Calendar} 
-          color="orange" 
-          alert={stats.expiringSoon > 0}
-        />
-        <StatCard 
-          label="Expired Items" 
-          value={stats.expired} 
-          icon={PackageX} 
-          color="red" 
-          alert={stats.expired > 0}
-        />
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <button 
+          onClick={() => setFilterType('all')}
+          className={cn(
+            "text-left transition-all",
+            filterType === 'all' ? "ring-2 ring-blue-500 ring-offset-2 rounded-2xl" : ""
+          )}
+        >
+          <StatCard 
+            label="Total Medications" 
+            value={stats.total} 
+            icon={PackageCheck} 
+            color="blue" 
+          />
+        </button>
+        <button 
+          onClick={() => setFilterType('low-stock')}
+          className={cn(
+            "text-left transition-all",
+            filterType === 'low-stock' ? "ring-2 ring-amber-500 ring-offset-2 rounded-2xl" : ""
+          )}
+        >
+          <StatCard 
+            label="Low Stock Alerts" 
+            value={stats.lowStock} 
+            icon={AlertTriangle} 
+            color="amber" 
+            alert={stats.lowStock > 0}
+          />
+        </button>
+        <button 
+          onClick={() => setFilterType('expiring')}
+          className={cn(
+            "text-left transition-all",
+            filterType === 'expiring' ? "ring-2 ring-orange-500 ring-offset-2 rounded-2xl" : ""
+          )}
+        >
+          <StatCard 
+            label="Expiring Soon" 
+            value={stats.expiringSoon} 
+            icon={Calendar} 
+            color="orange" 
+            alert={stats.criticalExpiring > 0}
+            subValue={stats.criticalExpiring > 0 ? `${stats.criticalExpiring} critical (<30d)` : undefined}
+          />
+        </button>
+        <button 
+          onClick={() => setFilterType('expired')}
+          className={cn(
+            "text-left transition-all",
+            filterType === 'expired' ? "ring-2 ring-red-500 ring-offset-2 rounded-2xl" : ""
+          )}
+        >
+          <StatCard 
+            label="Expired Items" 
+            value={stats.expired} 
+            icon={PackageX} 
+            color="red" 
+            alert={stats.expired > 0}
+          />
+        </button>
+        <button 
+          onClick={() => setFilterType('price-alerts')}
+          className={cn(
+            "text-left transition-all",
+            filterType === 'price-alerts' ? "ring-2 ring-emerald-500 ring-offset-2 rounded-2xl" : ""
+          )}
+        >
+          <StatCard 
+            label="Price Alerts" 
+            value={stats.priceAlerts} 
+            icon={ArrowUpRight} 
+            color="emerald" 
+            alert={stats.priceAlerts > 0}
+          />
+        </button>
       </div>
 
       {/* Table Section */}
@@ -327,17 +334,34 @@ export default function Inventory() {
                       </td>
                       <td className="px-6 py-4">
                         <div className={cn(
-                          "flex items-center gap-1.5 px-2 py-1 rounded-lg w-fit",
+                          "flex items-center gap-1.5 px-2 py-1 rounded-lg w-fit transition-all",
+                          expStatus.isUrgent ? "bg-red-100 ring-1 ring-red-200" : 
                           expStatus.isCritical ? "bg-red-50" : ""
                         )}>
-                          {expStatus.isCritical && <AlertTriangle className="w-3.5 h-3.5 text-red-500" />}
+                          {expStatus.isCritical && (
+                            <AlertTriangle className={cn(
+                              "w-3.5 h-3.5",
+                              expStatus.isUrgent ? "text-red-700 animate-pulse" : "text-red-500"
+                            )} />
+                          )}
                           <span className={cn("text-sm font-medium", expStatus.color)}>
                             {expStatus.label}
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        ${med.price.toFixed(2)}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-900 font-medium">${med.price.toFixed(2)}</span>
+                          {med.previousPrice && Math.abs((med.price - med.previousPrice) / med.previousPrice) >= (med.priceAlertThreshold || 0.1) && (
+                            <div className={cn(
+                              "flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold",
+                              med.price > med.previousPrice ? "text-red-600 bg-red-50" : "text-emerald-600 bg-emerald-50"
+                            )} title={`Previous price: $${med.previousPrice.toFixed(2)}`}>
+                              {med.price > med.previousPrice ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                              {Math.round(Math.abs((med.price - med.previousPrice) / med.previousPrice) * 100)}%
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider", status.color)}>
@@ -373,10 +397,22 @@ export default function Inventory() {
                               {med.batches.map((batch, bIdx) => {
                                 const bExpStatus = getExpirationStatus(batch.expirationDate);
                                 return (
-                                  <div key={bIdx} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex justify-between items-center">
-                                    <div>
-                                      <p className="text-[10px] font-bold text-gray-400 uppercase">Batch #{batch.batchNumber}</p>
-                                      <p className="text-sm font-bold text-gray-900">{batch.quantity} {med.unit}</p>
+                                  <div key={bIdx} className={cn(
+                                    "bg-white p-3 rounded-xl border shadow-sm flex justify-between items-center transition-all",
+                                    bExpStatus.isUrgent ? "border-red-200 bg-red-50 ring-1 ring-red-100" : 
+                                    bExpStatus.isCritical ? "border-red-100 bg-red-50/30" : "border-gray-100"
+                                  )}>
+                                    <div className="flex items-center gap-3">
+                                      {bExpStatus.isCritical && (
+                                        <AlertTriangle className={cn(
+                                          "w-4 h-4",
+                                          bExpStatus.isUrgent ? "text-red-600 animate-bounce" : "text-red-500"
+                                        )} />
+                                      )}
+                                      <div>
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase">Batch #{batch.batchNumber}</p>
+                                        <p className="text-sm font-bold text-gray-900">{batch.quantity} {med.unit}</p>
+                                      </div>
                                     </div>
                                     <div className="text-right">
                                       <p className="text-[10px] font-bold text-gray-400 uppercase">Expires</p>
@@ -418,6 +454,7 @@ export default function Inventory() {
                 ? batches.reduce((min, b) => b.expirationDate < min ? b.expirationDate : min, batches[0].expirationDate)
                 : '';
 
+              const newPrice = Number(formData.get('price'));
               const newMed: Medication = {
                 id: editingMedication?.id || Math.random().toString(36).substr(2, 9),
                 name: formData.get('name') as string,
@@ -425,7 +462,9 @@ export default function Inventory() {
                 stock: totalStock,
                 reorderThreshold: Number(formData.get('threshold')),
                 expirationDate: earliestExp,
-                price: Number(formData.get('price')),
+                price: newPrice,
+                previousPrice: editingMedication ? (editingMedication.price !== newPrice ? editingMedication.price : editingMedication.previousPrice) : undefined,
+                priceAlertThreshold: Number(formData.get('priceAlertThreshold')) / 100 || 0.1,
                 unit: formData.get('unit') as string,
                 lastUpdated: new Date().toISOString().split('T')[0],
                 batches: batches
@@ -463,6 +502,10 @@ export default function Inventory() {
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-gray-500 uppercase">Reorder Threshold</label>
                     <input name="threshold" type="number" defaultValue={editingMedication?.reorderThreshold} className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm" required />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-gray-500 uppercase">Price Alert Threshold (%)</label>
+                    <input name="priceAlertThreshold" type="number" defaultValue={editingMedication?.priceAlertThreshold ? editingMedication.priceAlertThreshold * 100 : 10} className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 text-sm" placeholder="e.g. 10" required />
                   </div>
                 </div>
 
@@ -554,17 +597,18 @@ export default function Inventory() {
   );
 }
 
-function StatCard({ label, value, icon: Icon, color, alert }: { label: string, value: number, icon: any, color: string, alert?: boolean }) {
+function StatCard({ label, value, icon: Icon, color, alert, subValue }: { label: string, value: number, icon: any, color: string, alert?: boolean, subValue?: string }) {
   const colors: Record<string, string> = {
     blue: 'text-blue-600 bg-blue-50',
     amber: 'text-amber-600 bg-amber-50',
     orange: 'text-orange-600 bg-orange-50',
     red: 'text-red-600 bg-red-50',
+    emerald: 'text-emerald-600 bg-emerald-50',
   };
 
   return (
     <div className={cn(
-      "bg-white p-6 rounded-2xl shadow-sm border transition-all",
+      "bg-white p-6 rounded-2xl shadow-sm border transition-all h-full",
       alert ? "border-red-100 bg-red-50/30" : "border-gray-100"
     )}>
       <div className="flex justify-between items-start">
@@ -579,7 +623,10 @@ function StatCard({ label, value, icon: Icon, color, alert }: { label: string, v
         )}
       </div>
       <div className="mt-4">
-        <h3 className="text-2xl font-bold text-gray-900">{value}</h3>
+        <div className="flex items-baseline gap-2">
+          <h3 className="text-2xl font-bold text-gray-900">{value}</h3>
+          {subValue && <span className="text-[10px] font-bold text-red-500 uppercase tracking-tight">{subValue}</span>}
+        </div>
         <p className="text-sm text-gray-500 font-medium">{label}</p>
       </div>
     </div>

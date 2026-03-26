@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Truck, 
   Plus, 
@@ -13,11 +13,14 @@ import {
   Phone,
   ArrowRight,
   Trash2,
-  Minus
+  Minus,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '../lib/utils';
-import { Supplier, PurchaseOrder } from '../types';
+import { Supplier, PurchaseOrder, Medication } from '../types';
+import { MOCK_MEDICATIONS } from '../data';
 
 const MOCK_SUPPLIERS: Supplier[] = [
   { id: '1', name: 'Global Pharma Corp', contactPerson: 'Alice Smith', email: 'alice@globalpharma.com', phone: '+1 234 567 890', category: 'General', address: '123 Pharma Way, New York, NY 10001', notes: 'Primary supplier for generic medications. Reliable delivery.' },
@@ -39,11 +42,12 @@ export default function Warehouse() {
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [orders, setOrders] = useState<PurchaseOrder[]>(MOCK_ORDERS);
   const [suppliers, setSuppliers] = useState<Supplier[]>(MOCK_SUPPLIERS);
+  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   
   const [newOrder, setNewOrder] = useState({
     supplierId: '',
     orderDate: format(new Date(), 'yyyy-MM-dd'),
-    items: [{ medicationId: '', name: '', quantity: 1, unitPrice: 0 }]
+    items: [{ medicationId: '', name: '', batchNumber: '', quantity: 1, unitPrice: 0 }]
   });
 
   const [newSupplier, setNewSupplier] = useState({
@@ -177,37 +181,104 @@ export default function Warehouse() {
                 {filteredOrders.map((order) => {
                   const supplier = suppliers.find(s => s.id === order.supplierId);
                   const config = getStatusConfig(order.status);
+                  const isExpanded = expandedOrder === order.id;
                   return (
-                    <tr key={order.id} className="hover:bg-gray-50/50 transition-colors group">
-                      <td className="px-6 py-4 font-bold text-blue-600 text-sm">{order.id}</td>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-gray-900">{supplier?.name}</div>
-                        <div className="text-xs text-gray-500">{supplier?.category}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-600">{order.items.length} items</div>
-                        <div className="text-xs text-gray-400 truncate max-w-[150px]">
-                          {order.items.map(i => i.name).join(', ')}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 font-bold text-gray-900 text-sm">
-                        ${order.totalAmount.toLocaleString()}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {order.orderDate}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 w-fit", config.color)}>
-                          <config.icon className="w-3 h-3" />
-                          {config.label}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button className="text-gray-400 hover:text-blue-600 transition-colors">
-                          <ArrowRight className="w-5 h-5" />
-                        </button>
-                      </td>
-                    </tr>
+                    <React.Fragment key={order.id}>
+                      <tr className="hover:bg-gray-50/50 transition-colors group border-b border-gray-50">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <button 
+                              onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
+                              className="p-1 hover:bg-gray-100 rounded-md transition-colors"
+                            >
+                              {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                            </button>
+                            <span className="font-bold text-blue-600 text-sm">{order.id}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-gray-900">{supplier?.name}</div>
+                          <div className="text-xs text-gray-500">{supplier?.category}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-600">{order.items.length} items</div>
+                          <div className="text-xs text-gray-400 truncate max-w-[150px]">
+                            {order.items.map(i => i.name).join(', ')}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 font-bold text-gray-900 text-sm">
+                          ${order.totalAmount.toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {order.orderDate}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 w-fit", config.color)}>
+                            <config.icon className="w-3 h-3" />
+                            {config.label}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button 
+                            onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
+                            className="text-gray-400 hover:text-blue-600 transition-colors"
+                          >
+                            <ArrowRight className={cn("w-5 h-5 transition-transform", isExpanded && "rotate-90")} />
+                          </button>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="bg-gray-50/30">
+                          <td colSpan={7} className="px-12 py-6">
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                                  <Package className="w-3 h-3" />
+                                  Order Items Details
+                                </div>
+                                <div className="text-xs text-gray-400">
+                                  Total Items: {order.items.length}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-1 gap-3">
+                                {order.items.map((item, idx) => (
+                                  <div key={idx} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex justify-between items-center">
+                                    <div className="flex items-center gap-4">
+                                      <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
+                                        <FileText className="w-5 h-5" />
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-bold text-gray-900">{item.name}</p>
+                                        <div className="flex items-center gap-2">
+                                          <p className="text-xs text-gray-500 font-mono">ID: {item.medicationId}</p>
+                                          {item.batchNumber && (
+                                            <p className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded uppercase">Batch: {item.batchNumber}</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-12">
+                                      <div className="text-center">
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Quantity</p>
+                                        <p className="text-sm font-bold text-gray-900">{item.quantity.toLocaleString()}</p>
+                                      </div>
+                                      <div className="text-center">
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Unit Price</p>
+                                        <p className="text-sm font-bold text-gray-900">${item.unitPrice.toFixed(2)}</p>
+                                      </div>
+                                      <div className="text-right min-w-[100px]">
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Subtotal</p>
+                                        <p className="text-sm font-bold text-blue-600">${(item.quantity * item.unitPrice).toLocaleString()}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
@@ -292,7 +363,7 @@ export default function Warehouse() {
               setNewOrder({
                 supplierId: '',
                 orderDate: format(new Date(), 'yyyy-MM-dd'),
-                items: [{ medicationId: '', name: '', quantity: 1, unitPrice: 0 }]
+                items: [{ medicationId: '', name: '', batchNumber: '', quantity: 1, unitPrice: 0 }]
               });
             }}>
               <div className="grid grid-cols-2 gap-4">
@@ -336,7 +407,7 @@ export default function Warehouse() {
                     type="button"
                     onClick={() => setNewOrder({
                       ...newOrder, 
-                      items: [...newOrder.items, { medicationId: '', name: '', quantity: 1, unitPrice: 0 }]
+                      items: [...newOrder.items, { medicationId: '', name: '', batchNumber: '', quantity: 1, unitPrice: 0 }]
                     })}
                     className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
                   >
@@ -347,19 +418,39 @@ export default function Warehouse() {
                 <div className="space-y-3">
                   {newOrder.items.map((item, idx) => (
                     <div key={idx} className="grid grid-cols-12 gap-3 items-end bg-gray-50 p-3 rounded-xl">
-                      <div className="col-span-5 space-y-1">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase">Medication Name</label>
-                        <input 
-                          type="text" 
-                          placeholder="e.g. Amoxicillin"
+                      <div className="col-span-4 space-y-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">Medication</label>
+                        <select 
                           className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-                          value={item.name}
+                          value={item.medicationId}
                           onChange={(e) => {
+                            const selectedMed = MOCK_MEDICATIONS.find(m => m.id === e.target.value);
                             const newItems = [...newOrder.items];
-                            newItems[idx].name = e.target.value;
+                            newItems[idx].medicationId = e.target.value;
+                            newItems[idx].name = selectedMed?.name || '';
+                            newItems[idx].unitPrice = selectedMed?.price || 0;
                             setNewOrder({...newOrder, items: newItems});
                           }}
                           required
+                        >
+                          <option value="">Select Medication</option>
+                          {MOCK_MEDICATIONS.map(m => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-span-2 space-y-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase">Batch #</label>
+                        <input 
+                          type="text" 
+                          placeholder="B-001"
+                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
+                          value={item.batchNumber}
+                          onChange={(e) => {
+                            const newItems = [...newOrder.items];
+                            newItems[idx].batchNumber = e.target.value;
+                            setNewOrder({...newOrder, items: newItems});
+                          }}
                         />
                       </div>
                       <div className="col-span-2 space-y-1">
@@ -376,7 +467,7 @@ export default function Warehouse() {
                           required
                         />
                       </div>
-                      <div className="col-span-3 space-y-1">
+                      <div className="col-span-2 space-y-1">
                         <label className="text-[10px] font-bold text-gray-400 uppercase">Unit Price</label>
                         <input 
                           type="number" 

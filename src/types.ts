@@ -14,6 +14,7 @@ export type Medication = {
   price: number;
   previousPrice?: number;
   priceAlertThreshold?: number;
+  priceHistory?: { date: string; price: number }[];
   unit: string;
   lastUpdated: string;
   batches: Batch[];

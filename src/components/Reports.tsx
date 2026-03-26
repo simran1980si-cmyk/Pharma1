@@ -27,9 +27,12 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend
+  Legend,
+  LineChart,
+  Line
 } from 'recharts';
 import { cn } from '../lib/utils';
+import { MOCK_MEDICATIONS } from '../data';
 
 const SALES_DATA = [
   { name: 'Jan', sales: 45000, profit: 12000 },
@@ -58,6 +61,38 @@ const TOP_PRODUCTS = [
 
 export default function Reports() {
   const [timeRange, setTimeRange] = useState('6M');
+
+  const priceAlertMedications = useMemo(() => {
+    return MOCK_MEDICATIONS.filter(m => {
+      if (!m.previousPrice || !m.priceHistory) return false;
+      const threshold = m.priceAlertThreshold || 0.1;
+      return Math.abs((m.price - m.previousPrice) / m.previousPrice) >= threshold;
+    });
+  }, []);
+
+  // Prepare data for the multi-line chart
+  // We need a unique set of dates
+  const priceHistoryData = useMemo(() => {
+    const dates = new Set<string>();
+    priceAlertMedications.forEach(m => {
+      m.priceHistory?.forEach(h => dates.add(h.date));
+    });
+
+    const sortedDates = Array.from(dates).sort();
+    
+    return sortedDates.map(date => {
+      const entry: any = { date: date };
+      priceAlertMedications.forEach(m => {
+        const historyEntry = m.priceHistory?.find(h => h.date === date);
+        if (historyEntry) {
+          entry[m.name] = historyEntry.price;
+        }
+      });
+      return entry;
+    });
+  }, [priceAlertMedications]);
+
+  const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
   return (
     <div className="p-8 space-y-8 bg-gray-50 min-h-screen">
@@ -191,6 +226,54 @@ export default function Reports() {
 
       {/* Bottom Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-bold text-gray-900">Medication Price History</h3>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                <span className="text-[10px] text-gray-500 font-medium">Alert Enabled</span>
+              </div>
+            </div>
+          </div>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={priceHistoryData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis 
+                  dataKey="date" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{fill: '#94a3b8', fontSize: 10}} 
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{fill: '#94a3b8', fontSize: 12}}
+                  tickFormatter={(value) => `$${value}`}
+                />
+                <Tooltip 
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  formatter={(value: number) => [`$${value.toFixed(2)}`, 'Price']}
+                />
+                <Legend iconType="circle" />
+                {priceAlertMedications.map((med, idx) => (
+                  <Line 
+                    key={med.id}
+                    type="monotone" 
+                    dataKey={med.name} 
+                    stroke={colors[idx % colors.length]} 
+                    strokeWidth={3}
+                    dot={{ r: 4, strokeWidth: 2, fill: '#fff' }}
+                    activeDot={{ r: 6, strokeWidth: 0 }}
+                    connectNulls
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-bold text-gray-900 mb-6">Top Selling Products</h3>
           <div className="space-y-4">

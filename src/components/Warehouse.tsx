@@ -29,9 +29,9 @@ const MOCK_SUPPLIERS: Supplier[] = [
 ];
 
 const MOCK_ORDERS: PurchaseOrder[] = [
-  { id: 'PO-001', supplierId: '1', items: [{ medicationId: '1', name: 'Amoxicillin', quantity: 500, unitPrice: 10 }], totalAmount: 5000, status: 'RECEIVED', orderDate: '2026-03-10', receivedDate: '2026-03-15' },
-  { id: 'PO-002', supplierId: '2', items: [{ medicationId: '2', name: 'Lisinopril', quantity: 1000, unitPrice: 5 }], totalAmount: 5000, status: 'ORDERED', orderDate: '2026-03-20' },
-  { id: 'PO-003', supplierId: '3', items: [{ medicationId: '3', name: 'Atorvastatin', quantity: 200, unitPrice: 12 }], totalAmount: 2400, status: 'PENDING', orderDate: '2026-03-25' },
+  { id: 'PO-001', supplierId: '1', items: [{ medicationId: '1', name: 'Amoxicillin', batchNumber: 'BAT-2026-001', quantity: 500, unitPrice: 10 }], totalAmount: 5000, status: 'RECEIVED', orderDate: '2026-03-10', receivedDate: '2026-03-15' },
+  { id: 'PO-002', supplierId: '2', items: [{ medicationId: '2', name: 'Lisinopril', batchNumber: 'BAT-2026-002', quantity: 1000, unitPrice: 5 }], totalAmount: 5000, status: 'ORDERED', orderDate: '2026-03-20' },
+  { id: 'PO-003', supplierId: '3', items: [{ medicationId: '3', name: 'Atorvastatin', batchNumber: 'BAT-2026-003', quantity: 200, unitPrice: 12 }], totalAmount: 2400, status: 'PENDING', orderDate: '2026-03-25' },
 ];
 
 export default function Warehouse() {
@@ -59,6 +59,14 @@ export default function Warehouse() {
     address: '',
     notes: ''
   });
+
+  const handleStatusChange = (orderId: string, newStatus: PurchaseOrder['status']) => {
+    setOrders(prev => prev.map(order => 
+      order.id === orderId 
+        ? { ...order, status: newStatus, receivedDate: newStatus === 'RECEIVED' ? format(new Date(), 'yyyy-MM-dd') : order.receivedDate } 
+        : order
+    ));
+  };
 
   const handleEditSupplier = (supplier: Supplier) => {
     setEditingSupplier(supplier);
@@ -213,10 +221,19 @@ export default function Warehouse() {
                           {order.orderDate}
                         </td>
                         <td className="px-6 py-4">
-                          <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 w-fit", config.color)}>
-                            <config.icon className="w-3 h-3" />
-                            {config.label}
-                          </span>
+                          <select 
+                            className={cn(
+                              "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer",
+                              config.color
+                            )}
+                            value={order.status}
+                            onChange={(e) => handleStatusChange(order.id, e.target.value as PurchaseOrder['status'])}
+                          >
+                            <option value="PENDING">Draft</option>
+                            <option value="ORDERED">In Transit</option>
+                            <option value="RECEIVED">Received</option>
+                            <option value="CANCELLED">Cancelled</option>
+                          </select>
                         </td>
                         <td className="px-6 py-4 text-right">
                           <button 
@@ -400,105 +417,116 @@ export default function Warehouse() {
                 </div>
               )}
 
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <label className="text-xs font-semibold text-gray-500 uppercase">Items</label>
-                  <button 
-                    type="button"
-                    onClick={() => setNewOrder({
-                      ...newOrder, 
-                      items: [...newOrder.items, { medicationId: '', name: '', batchNumber: '', quantity: 1, unitPrice: 0 }]
-                    })}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" /> Add Item
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {newOrder.items.map((item, idx) => (
-                    <div key={idx} className="grid grid-cols-12 gap-3 items-end bg-gray-50 p-3 rounded-xl">
-                      <div className="col-span-4 space-y-1">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase">Medication</label>
-                        <select 
-                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-                          value={item.medicationId}
-                          onChange={(e) => {
-                            const selectedMed = MOCK_MEDICATIONS.find(m => m.id === e.target.value);
-                            const newItems = [...newOrder.items];
-                            newItems[idx].medicationId = e.target.value;
-                            newItems[idx].name = selectedMed?.name || '';
-                            newItems[idx].unitPrice = selectedMed?.price || 0;
-                            setNewOrder({...newOrder, items: newItems});
-                          }}
-                          required
-                        >
-                          <option value="">Select Medication</option>
-                          {MOCK_MEDICATIONS.map(m => (
-                            <option key={m.id} value={m.id}>{m.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="col-span-2 space-y-1">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase">Batch #</label>
-                        <input 
-                          type="text" 
-                          placeholder="B-001"
-                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-                          value={item.batchNumber}
-                          onChange={(e) => {
-                            const newItems = [...newOrder.items];
-                            newItems[idx].batchNumber = e.target.value;
-                            setNewOrder({...newOrder, items: newItems});
-                          }}
-                        />
-                      </div>
-                      <div className="col-span-2 space-y-1">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase">Qty</label>
-                        <input 
-                          type="number" 
-                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-                          value={item.quantity}
-                          onChange={(e) => {
-                            const newItems = [...newOrder.items];
-                            newItems[idx].quantity = Number(e.target.value);
-                            setNewOrder({...newOrder, items: newItems});
-                          }}
-                          required
-                        />
-                      </div>
-                      <div className="col-span-2 space-y-1">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase">Unit Price</label>
-                        <input 
-                          type="number" 
-                          step="0.01"
-                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-                          value={item.unitPrice}
-                          onChange={(e) => {
-                            const newItems = [...newOrder.items];
-                            newItems[idx].unitPrice = Number(e.target.value);
-                            setNewOrder({...newOrder, items: newItems});
-                          }}
-                          required
-                        />
-                      </div>
-                      <div className="col-span-2 pb-1">
-                        <button 
-                          type="button"
-                          onClick={() => {
-                            if (newOrder.items.length === 1) return;
-                            const newItems = newOrder.items.filter((_, i) => i !== idx);
-                            setNewOrder({...newOrder, items: newItems});
-                          }}
-                          className="p-2 text-gray-400 hover:text-red-500 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
+                    <div>
+                      <label className="text-xs font-semibold text-gray-500 uppercase block">Items</label>
+                      <p className="text-[10px] text-gray-400 font-medium">Add medications to this order</p>
                     </div>
-                  ))}
+                    <button 
+                      type="button"
+                      onClick={() => setNewOrder({
+                        ...newOrder, 
+                        items: [...newOrder.items, { medicationId: '', name: '', batchNumber: '', quantity: 1, unitPrice: 0 }]
+                      })}
+                      className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-all flex items-center gap-1.5 shadow-sm shadow-blue-500/20"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Item
+                    </button>
+                  </div>
+
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                    {newOrder.items.map((item, idx) => (
+                      <div key={idx} className="grid grid-cols-12 gap-3 items-end bg-white p-4 rounded-xl border border-gray-100 shadow-sm relative group/item">
+                        <div className="col-span-12 md:col-span-4 space-y-1">
+                          <label className="text-[10px] font-bold text-gray-400 uppercase">Medication</label>
+                          <select 
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                            value={item.medicationId}
+                            onChange={(e) => {
+                              const selectedMed = MOCK_MEDICATIONS.find(m => m.id === e.target.value);
+                              const newItems = [...newOrder.items];
+                              newItems[idx].medicationId = e.target.value;
+                              newItems[idx].name = selectedMed?.name || '';
+                              newItems[idx].unitPrice = selectedMed?.price || 0;
+                              setNewOrder({...newOrder, items: newItems});
+                            }}
+                            required
+                          >
+                            <option value="">Select Medication</option>
+                            {[...MOCK_MEDICATIONS].sort((a, b) => a.name.localeCompare(b.name)).map(m => (
+                              <option key={m.id} value={m.id}>{m.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="col-span-6 md:col-span-2 space-y-1">
+                          <label className="text-[10px] font-bold text-gray-400 uppercase">Batch #</label>
+                          <input 
+                            type="text" 
+                            placeholder="B-001"
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                            value={item.batchNumber}
+                            onChange={(e) => {
+                              const newItems = [...newOrder.items];
+                              newItems[idx].batchNumber = e.target.value;
+                              setNewOrder({...newOrder, items: newItems});
+                            }}
+                          />
+                        </div>
+                        <div className="col-span-3 md:col-span-2 space-y-1">
+                          <label className="text-[10px] font-bold text-gray-400 uppercase">Qty</label>
+                          <input 
+                            type="number" 
+                            min="1"
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const newItems = [...newOrder.items];
+                              newItems[idx].quantity = Math.max(1, Number(e.target.value));
+                              setNewOrder({...newOrder, items: newItems});
+                            }}
+                            required
+                          />
+                        </div>
+                        <div className="col-span-3 md:col-span-2 space-y-1">
+                          <label className="text-[10px] font-bold text-gray-400 uppercase">Price</label>
+                          <input 
+                            type="number" 
+                            step="0.01"
+                            min="0"
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                            value={item.unitPrice}
+                            onChange={(e) => {
+                              const newItems = [...newOrder.items];
+                              newItems[idx].unitPrice = Math.max(0, Number(e.target.value));
+                              setNewOrder({...newOrder, items: newItems});
+                            }}
+                            required
+                          />
+                        </div>
+                        <div className="col-span-10 md:col-span-1 space-y-1">
+                          <label className="text-[10px] font-bold text-gray-400 uppercase">Total</label>
+                          <div className="text-xs font-bold text-blue-600 py-2">
+                            ${(item.quantity * item.unitPrice).toLocaleString()}
+                          </div>
+                        </div>
+                        <div className="col-span-2 md:col-span-1 flex justify-end pb-1">
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              if (newOrder.items.length === 1) return;
+                              const newItems = newOrder.items.filter((_, i) => i !== idx);
+                              setNewOrder({...newOrder, items: newItems});
+                            }}
+                            className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
               <div className="pt-4 border-t border-gray-100 flex justify-between items-center">
                 <div>

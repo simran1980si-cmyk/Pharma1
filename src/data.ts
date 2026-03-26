@@ -11,6 +11,12 @@ export const MOCK_MEDICATIONS: Medication[] = [
     price: 12.50, 
     previousPrice: 10.00,
     priceAlertThreshold: 0.1,
+    priceHistory: [
+      { date: '2026-01-01', price: 9.50 },
+      { date: '2026-02-01', price: 10.00 },
+      { date: '2026-03-01', price: 11.00 },
+      { date: '2026-03-25', price: 12.50 },
+    ],
     unit: 'Capsules', 
     lastUpdated: '2026-03-25',
     batches: [
@@ -28,6 +34,12 @@ export const MOCK_MEDICATIONS: Medication[] = [
     price: 8.00, 
     previousPrice: 9.50,
     priceAlertThreshold: 0.1,
+    priceHistory: [
+      { date: '2026-01-01', price: 10.00 },
+      { date: '2026-02-01', price: 9.80 },
+      { date: '2026-03-01', price: 9.50 },
+      { date: '2026-03-24', price: 8.00 },
+    ],
     unit: 'Tablets', 
     lastUpdated: '2026-03-24',
     batches: [
@@ -43,6 +55,12 @@ export const MOCK_MEDICATIONS: Medication[] = [
     expirationDate: '2026-04-01', 
     price: 15.20, 
     priceAlertThreshold: 0.1,
+    priceHistory: [
+      { date: '2026-01-01', price: 14.00 },
+      { date: '2026-02-01', price: 14.50 },
+      { date: '2026-03-01', price: 15.00 },
+      { date: '2026-03-26', price: 15.20 },
+    ],
     unit: 'Tablets', 
     lastUpdated: '2026-03-26',
     batches: [
@@ -58,6 +76,12 @@ export const MOCK_MEDICATIONS: Medication[] = [
     expirationDate: '2026-12-20', 
     price: 5.50, 
     priceAlertThreshold: 0.1,
+    priceHistory: [
+      { date: '2026-01-01', price: 5.00 },
+      { date: '2026-02-01', price: 5.20 },
+      { date: '2026-03-01', price: 5.40 },
+      { date: '2026-03-20', price: 5.50 },
+    ],
     unit: 'Tablets', 
     lastUpdated: '2026-03-20',
     batches: [
@@ -73,6 +97,12 @@ export const MOCK_MEDICATIONS: Medication[] = [
     expirationDate: '2026-03-30', 
     price: 6.75, 
     priceAlertThreshold: 0.1,
+    priceHistory: [
+      { date: '2026-01-01', price: 6.00 },
+      { date: '2026-02-01', price: 6.25 },
+      { date: '2026-03-01', price: 6.50 },
+      { date: '2026-03-22', price: 6.75 },
+    ],
     unit: 'Tablets', 
     lastUpdated: '2026-03-22',
     batches: [

@@ -25,7 +25,7 @@ export default function Inventory() {
   const [medications, setMedications] = useState<Medication[]>(MOCK_MEDICATIONS);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'soonest' | 'furthest' | 'none'>('none');
-  const [filterType, setFilterType] = useState<'all' | 'low-stock' | 'expiring' | 'expired' | 'price-alerts'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'low-stock' | 'expiring' | 'expiring-7d' | 'expired' | 'price-alerts'>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingMedication, setEditingMedication] = useState<Medication | null>(null);
   const [expandedMed, setExpandedMed] = useState<string | null>(null);
@@ -72,7 +72,12 @@ export default function Inventory() {
     } else if (filterType === 'expiring') {
       result = result.filter(m => {
         const expDate = new Date(m.expirationDate);
-        return isBefore(expDate, addMonths(new Date(), 3)) && !isPast(expDate);
+        return isBefore(expDate, addMonths(new Date(), 3)) && !isBefore(expDate, addDays(new Date(), 7)) && !isPast(expDate);
+      });
+    } else if (filterType === 'expiring-7d') {
+      result = result.filter(m => {
+        const expDate = new Date(m.expirationDate);
+        return isBefore(expDate, addDays(new Date(), 7)) && !isPast(expDate);
       });
     } else if (filterType === 'expired') {
       result = result.filter(m => isPast(new Date(m.expirationDate)));
@@ -107,6 +112,10 @@ export default function Inventory() {
       const expDate = new Date(m.expirationDate);
       return isBefore(expDate, addDays(new Date(), 30)) && !isPast(expDate);
     }).length;
+    const critical7d = medications.filter(m => {
+      const expDate = new Date(m.expirationDate);
+      return isBefore(expDate, addDays(new Date(), 7)) && !isPast(expDate);
+    }).length;
     const expired = medications.filter(m => isPast(new Date(m.expirationDate))).length;
     const priceAlerts = medications.filter(m => {
       if (!m.previousPrice) return false;
@@ -114,7 +123,7 @@ export default function Inventory() {
       return Math.abs((m.price - m.previousPrice) / m.previousPrice) >= threshold;
     }).length;
 
-    return { total, lowStock, expiringSoon, expired, priceAlerts };
+    return { total, lowStock, expiringSoon, critical7d, expired, priceAlerts };
   }, [medications]);
 
   const handleDelete = (id: string) => {
@@ -160,7 +169,7 @@ export default function Inventory() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <button 
           onClick={() => setFilterType('all')}
           className={cn(
@@ -191,6 +200,22 @@ export default function Inventory() {
           />
         </button>
         <button 
+          onClick={() => setFilterType('expiring-7d')}
+          className={cn(
+            "text-left transition-all",
+            filterType === 'expiring-7d' ? "ring-2 ring-red-600 ring-offset-2 rounded-2xl" : ""
+          )}
+        >
+          <StatCard 
+            label="Critical Expiry" 
+            value={stats.critical7d} 
+            icon={AlertTriangle} 
+            color="red" 
+            alert={stats.critical7d > 0}
+            subValue="< 7 Days"
+          />
+        </button>
+        <button 
           onClick={() => setFilterType('expiring')}
           className={cn(
             "text-left transition-all",
@@ -203,7 +228,7 @@ export default function Inventory() {
             icon={Calendar} 
             color="orange" 
             alert={stats.criticalExpiring > 0}
-            subValue={stats.criticalExpiring > 0 ? `${stats.criticalExpiring} critical (<30d)` : undefined}
+            subValue={stats.criticalExpiring > 0 ? `${stats.criticalExpiring} < 30d` : undefined}
           />
         </button>
         <button 
